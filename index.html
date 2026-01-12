@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Gestionale Professionale</title>
+    <!-- Tailwind + DaisyUI -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-base-200 min-h-screen">
+
+    <div class="container mx-auto p-6 max-w-5xl">
+        <!-- Header -->
+        <header class="text-center mt-12 mb-16">
+            <h1 class="text-6xl font-black text-gray-900 mb-4 tracking-tighter italic">Gestionale Pro</h1>
+            <p class="text-xl text-gray-500 font-medium uppercase tracking-widest">Pannello di Controllo</p>
+        </header>
+
+        <!-- Griglia Bottoni Statica -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+            
+            <!-- Bottone ANAGRAFICA -->
+            <a href="anagrafica.html" class="card bg-white shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border-b-8 border-primary group">
+                <div class="card-body items-center p-12 text-center">
+                    <div class="p-6 rounded-3xl bg-primary/10 group-hover:bg-primary/20 transition-colors mb-4">
+                        <i data-lucide="users" class="w-16 h-16 text-primary"></i>
+                    </div>
+                    <h2 class="card-title text-3xl font-black text-gray-800 uppercase">Anagrafica</h2>
+                    <p class="text-gray-400 font-medium italic">Archivio Nomi ed Enti</p>
+                    <div class="card-actions mt-8">
+                        <div class="btn btn-primary btn-wide rounded-full text-white shadow-lg">Apri Archivio</div>
+                    </div>
+                </div>
+            </a>
+
+            <!-- Bottone AREA IN ARRIVO (Placeholder) -->
+            <div class="card bg-gray-50 border-2 border-dashed border-gray-300 opacity-60">
+                <div class="card-body items-center p-12 text-center">
+                    <div class="p-6 rounded-3xl bg-gray-100 mb-4">
+                        <i data-lucide="lock" class="w-16 h-16 text-gray-300"></i>
+                    </div>
+                    <h2 class="card-title text-3xl font-black text-gray-400 uppercase tracking-widest">Area 2</h2>
+                    <p class="text-gray-400 font-medium italic">Funzione in fase di sviluppo</p>
+                    <div class="card-actions mt-8 font-bold text-gray-300 uppercase text-xs tracking-widest">
+                        Accesso Riservato
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-20 text-center">
+            <div class="divider opacity-10"></div>
+            <p class="text-gray-400 text-sm font-medium">Sistema di Gestione Integrata v1.1</p>
+        </footer>
+    </div>
+
+    <!-- Script Base -->
+    <script src="assets/js/config.js"></script>
+    <script src="assets/js/ui.js"></script>
+    <script>
+        // Inizializza la Navbar e le Icone
+        injectNavbar();
+        lucide.createIcons();
+    </script>
+</body>
+</html>
