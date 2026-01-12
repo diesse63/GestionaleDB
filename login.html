@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Gestionale Chiara</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-base-200 min-h-screen flex items-center justify-center">
+    <div class="card bg-white shadow-2xl p-10 w-full max-w-sm rounded-3xl">
+        <h2 class="text-3xl font-black text-center italic tracking-tighter text-primary mb-8">Accesso Sistema</h2>
+        <div class="space-y-4">
+            <input type="email" id="email" placeholder="Email" class="input input-bordered w-full font-medium" />
+            <input type="password" id="pass" placeholder="Password" class="input input-bordered w-full font-medium" />
+            <button onclick="handleLogin()" id="btn-login" class="btn btn-primary w-full rounded-full shadow-lg">Entra</button>
+            <p id="err-msg" class="text-error text-xs font-bold text-center hidden uppercase">Credenziali errate</p>
+        </div>
+    </div>
+
+    <script src="assets/js/config.js"></script>
+    <script src="assets/js/api.js"></script>
+    <script>
+        async function handleLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('pass').value;
+            const btn = document.getElementById('btn-login');
+            const err = document.getElementById('err-msg');
+
+            btn.classList.add('loading');
+            err.classList.add('hidden');
+
+            const res = await sendDataAction({ action: "login", email, password });
+
+            if (res.result === "success") {
+                sessionStorage.setItem('userRole', res.role);
+                sessionStorage.setItem('userName', res.nome);
+                window.location.href = "index.html";
+            } else {
+                btn.classList.remove('loading');
+                err.classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

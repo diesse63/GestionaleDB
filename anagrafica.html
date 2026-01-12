@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anagrafica Pro - Sistema Gestionale</title>
+    <title>Anagrafica - Sistema Gestionale</title>
     <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -12,9 +12,7 @@
         .clickable-row:hover { background-color: #f0fdf4; }
         .badge-tavolo { background-color: #10b981; color: white; font-weight: 800; font-size: 10px; padding: 10px; text-transform: uppercase; border-radius: 999px; }
         .badge-direttivo { background-color: #f59e0b; color: white; font-weight: 800; font-size: 10px; padding: 10px; text-transform: uppercase; border-radius: 999px; }
-        
-        /* Fix Popup Tagliato */
-        .modal-box { max-height: 92vh; overflow-y: auto; scrollbar-width: thin; }
+        .modal-box { max-height: 90vh; overflow-y: auto; }
     </style>
 </head>
 <body class="bg-base-200 min-h-screen">
@@ -24,12 +22,13 @@
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
             <div>
                 <nav class="text-sm breadcrumbs text-gray-400 mb-2">
-                    <ul><li><a href="index.html">Dashboard</a></li><li class="font-bold text-gray-600 uppercase">Anagrafica</li></ul>
+                    <ul><li><a href="index.html">Dashboard</a></li><li class="font-bold text-gray-600 uppercase italic">Anagrafica</li></ul>
                 </nav>
                 <h1 class="text-5xl font-black text-gray-900 tracking-tighter italic">Enti e Soggetti</h1>
+                <p class="text-gray-500 mt-2 font-medium italic">Gestione relazionale dei soggetti accreditati.</p>
             </div>
             <div class="form-control">
-                <input type="text" id="searchInput" placeholder="Cerca anche per referente..." class="input input-bordered shadow-2xl w-full md:w-96" onkeyup="filterTable()" />
+                <input type="text" id="searchInput" placeholder="Cerca ente o referente..." class="input input-bordered shadow-2xl w-full md:w-96" onkeyup="filterTable()" />
             </div>
         </div>
 
@@ -42,7 +41,7 @@
                             <th class="py-6 px-8 text-center">Tipo</th>
                             <th>Ente / Relazioni Correlate</th>
                             <th class="text-center">Status</th>
-                            <th class="text-right px-8 font-black uppercase tracking-widest text-primary">Dettaglio</th>
+                            <th class="text-right px-8 font-black uppercase text-primary">Dettaglio</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -50,7 +49,7 @@
             </div>
             <div id="loader" class="flex flex-col items-center justify-center p-32">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
-                <p class="mt-4 font-bold text-gray-400">Caricamento database relazionale...</p>
+                <p class="mt-4 font-bold text-gray-400 uppercase text-xs tracking-widest">Sincronizzazione Database...</p>
             </div>
         </div>
     </div>
@@ -60,10 +59,12 @@
     <div class="modal modal-bottom sm:modal-middle">
       <div class="modal-box max-w-4xl rounded-3xl p-0 shadow-2xl border border-gray-100">
         <div class="bg-gray-900 p-8 text-white flex justify-between items-center sticky top-0 z-10">
-            <div><h3 id="modal-title-display" class="font-black text-3xl italic uppercase text-primary">Dettaglio</h3></div>
+            <div><h3 id="modal-title-display" class="font-black text-3xl italic uppercase text-primary tracking-tighter">Dettaglio</h3></div>
             <label for="modal-edit" class="btn btn-sm btn-circle btn-ghost text-white">✕</label>
         </div>
         <div class="p-8">
+            <div id="admin-alert" class="alert alert-info mb-6 hidden font-bold text-xs uppercase">Modalità Sola Lettura (Ruolo USER)</div>
+            
             <form id="editForm" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <input type="hidden" id="edit-id">
                 <div class="form-control md:col-span-2">
@@ -74,27 +75,29 @@
                 <div class="form-control"><label class="label text-xs font-bold uppercase text-gray-400">PEC</label><input type="text" id="edit-pec" class="input input-bordered bg-gray-50" /></div>
                 
                 <div class="flex items-center gap-4 p-5 bg-emerald-50 rounded-2xl border border-emerald-100">
-                    <input type="checkbox" id="edit-tavolo" class="checkbox checkbox-primary" /><span class="font-black text-emerald-800 uppercase text-xs italic">Tavolo</span>
+                    <input type="checkbox" id="edit-tavolo" class="checkbox checkbox-primary" />
+                    <span class="font-black text-emerald-800 uppercase text-xs">Tavolo</span>
                 </div>
                 <div class="flex items-center gap-4 p-5 bg-amber-50 rounded-2xl border border-amber-100">
-                    <input type="checkbox" id="edit-direttivo" class="checkbox checkbox-warning" /><span class="font-black text-amber-800 uppercase text-xs italic">Direttivo</span>
+                    <input type="checkbox" id="edit-direttivo" class="checkbox checkbox-warning" />
+                    <span class="font-black text-amber-800 uppercase text-xs">Direttivo</span>
                 </div>
 
-                <!-- Sezioni Relazionali nel Popup -->
                 <div class="md:col-span-1 mt-4">
-                    <h4 class="text-xs font-black uppercase mb-3 text-amber-600 border-b pb-1 italic">Referente:</h4>
+                    <h4 class="text-[11px] font-black uppercase mb-3 text-amber-600 border-b pb-1">Referente:</h4>
                     <div id="modal-referenti" class="space-y-2"></div>
                 </div>
                 <div class="md:col-span-1 mt-4">
-                    <h4 class="text-xs font-black uppercase mb-3 text-blue-600 border-b pb-1 italic">Altri Soggetti:</h4>
+                    <h4 class="text-[11px] font-black uppercase mb-3 text-blue-600 border-b pb-1">Altri Soggetti:</h4>
                     <div id="modal-altri" class="space-y-2"></div>
                 </div>
             </form>
-            <div class="modal-action flex justify-between mt-12 border-t pt-8 pb-4">
-              <button onclick="handleDelete()" class="btn btn-error btn-outline rounded-full px-10">Elimina</button>
+
+            <div class="modal-action flex justify-between mt-12 border-t pt-8">
+              <button id="btn-delete" onclick="handleDelete()" class="btn btn-error btn-outline rounded-full px-10">Elimina</button>
               <div class="flex gap-3">
                   <label for="modal-edit" class="btn btn-ghost rounded-full px-8">Chiudi</label>
-                  <button onclick="handleUpdate()" id="btn-save" class="btn btn-primary rounded-full px-12 text-white font-bold">Salva</button>
+                  <button id="btn-save" onclick="handleUpdate()" class="btn btn-primary rounded-full px-12 text-white font-bold">Salva Modifiche</button>
               </div>
             </div>
         </div>
@@ -117,16 +120,14 @@
             tableBody.innerHTML = data.map(item => {
                 const isTavolo = String(item.TAVOLO).toUpperCase() === "TRUE";
                 const isDirettivo = String(item['DIRETTIVO _DELEGAZIONE']).toUpperCase() === "TRUE";
-                
-                // Estrazione nomi per visualizzazione e RICERCA
                 const refNames = (item.REFERENTI_COLLEGATI || []).map(r => r.Nome).join(', ');
                 const altNames = (item.ALTRI_SOGGETTI_COLLEGATI || []).map(s => s.Nome).join(', ');
 
                 return `
                 <tr class="clickable-row group" onclick="openEditModal('${item.ID}')">
-                    <td class="text-center font-bold text-gray-400">TIP ${item.ID_TIPOLOGIA || '1'}</td>
+                    <td class="text-center font-bold text-gray-300">TIP ${item.ID_TIPOLOGIA || '1'}</td>
                     <td class="py-6">
-                        <div class="font-black text-gray-900 text-lg uppercase leading-tight mb-2">${item.SOGGETTO}</div>
+                        <div class="font-black text-gray-900 text-lg uppercase group-hover:text-primary transition-all leading-tight mb-2">${item.SOGGETTO}</div>
                         <div class="space-y-1.5">
                             ${refNames ? `<div class="text-[11px] bg-amber-50 p-1.5 rounded-lg border-l-4 border-amber-400 pl-3">
                                 <span class="font-black text-amber-600 uppercase tracking-tighter italic">Referente:</span> ${refNames}
@@ -151,8 +152,11 @@
         }
 
         function openEditModal(id) {
+            const role = sessionStorage.getItem('userRole');
             const ente = localDataCache.find(d => String(d.ID) === String(id));
             if(!ente) return;
+
+            // Popola campi
             document.getElementById('edit-id').value = ente.ID;
             document.getElementById('edit-soggetto').value = ente.SOGGETTO;
             document.getElementById('edit-mail').value = ente.MAIL || '';
@@ -160,7 +164,24 @@
             document.getElementById('edit-tavolo').checked = String(ente.TAVOLO).toUpperCase() === "TRUE";
             document.getElementById('edit-direttivo').checked = String(ente['DIRETTIVO _DELEGAZIONE']).toUpperCase() === "TRUE";
             
-            // Riempimento liste referenti e altri nel Modal
+            // Gestione Permessi
+            const btnSave = document.getElementById('btn-save');
+            const btnDelete = document.getElementById('btn-delete');
+            const adminAlert = document.getElementById('admin-alert');
+            const inputs = document.querySelectorAll('#editForm input');
+
+            if (role === 'USER') {
+                btnSave.classList.add('hidden');
+                btnDelete.classList.add('hidden');
+                adminAlert.classList.remove('hidden');
+                inputs.forEach(i => i.disabled = true);
+            } else {
+                btnSave.classList.remove('hidden');
+                btnDelete.classList.remove('hidden');
+                adminAlert.classList.add('hidden');
+                inputs.forEach(i => i.disabled = false);
+            }
+
             renderPopupList('modal-referenti', ente.REFERENTI_COLLEGATI, 'amber');
             renderPopupList('modal-altri', ente.ALTRI_SOGGETTI_COLLEGATI, 'blue');
             
@@ -171,11 +192,28 @@
 
         function renderPopupList(id, list, color) {
             const container = document.getElementById(id);
-            container.innerHTML = (list && list.length) ? list.map(i => `
-                <div class="p-2 bg-${color}-50 border border-${color}-100 rounded-xl text-[10px] font-bold text-${color}-900 italic uppercase">
-                    ${i.Nome} <span class="opacity-50 font-normal">| ${i.Ruolo || ''}</span>
-                </div>
-            `).join('') : '<p class="text-[10px] text-gray-300 italic">Nessun dato.</p>';
+            container.innerHTML = (list && list.length) ? list.map(i => `<div class="p-2 bg-${color}-50 border border-${color}-100 rounded-xl text-[10px] font-bold text-${color}-900 italic uppercase">${i.Nome}</div>`).join('') : '<p class="text-[10px] text-gray-300 italic">Nessun dato.</p>';
+        }
+
+        async function handleUpdate() {
+            const payload = {
+                action: 'update',
+                ID: document.getElementById('edit-id').value,
+                SOGGETTO: document.getElementById('edit-soggetto').value,
+                MAIL: document.getElementById('edit-mail').value,
+                PEC: document.getElementById('edit-pec').value,
+                TAVOLO: document.getElementById('edit-tavolo').checked,
+                DIRETTIVO: document.getElementById('edit-direttivo').checked
+            };
+            if(!confirm("Salvare?")) return;
+            const res = await sendDataAction(payload);
+            if(res.result === "success") location.reload();
+        }
+
+        async function handleDelete() {
+            if(!confirm("Eliminare?")) return;
+            const res = await sendDataAction({ action: 'delete', ID: document.getElementById('edit-id').value });
+            if(res.result === "success") location.reload();
         }
 
         function filterTable() {
