@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestione Anagrafica</title>
+    <!-- Librerie Stile -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-base-200 min-h-screen relative flex items-center justify-center">
+
+    <!-- Tasto Home -->
+    <a href="/" class="btn btn-sm btn-ghost absolute top-4 left-4 text-gray-600 z-10">
+        ⬅ Torna alla Dashboard
+    </a>
+
+    <!-- Tasto Logout -->
+    <button onclick="logout()" class="btn btn-sm btn-error text-white absolute top-4 right-4 shadow-md z-10">
+        Esci 🚪
+    </button>
+
+    <div class="container mx-auto p-6 max-w-6xl">
+        
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-black uppercase text-blue-700 mb-2">
+                Gestione Anagrafica
+            </h1>
+            <p class="text-xl text-gray-500">Seleziona l'archivio da gestire</p>
+        </div>
+
+        <!-- Griglia 3 Bottoni -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            
+            <!-- 1. ANAGRAFICA (Spostato da dashboard_servizi) -->
+            <a href="anagrafica.html" class="card bg-white shadow-lg hover:-translate-y-2 transition-all duration-300 border-t-4 border-blue-600 p-6 text-center cursor-pointer">
+                <div class="card-body items-center p-4">
+                    <div class="text-5xl mb-4">📂</div>
+                    <h3 class="text-xl font-bold uppercase text-gray-700">Anagrafica</h3>
+                    <p class="text-sm text-gray-400">Elenco Enti e Associazioni</p>
+                </div>
+            </a>
+
+            <!-- 2. REFERENTI (Spostato da servizi.html) -->
+            <a href="gestione_referenti.html" class="card bg-white shadow-lg hover:-translate-y-2 transition-all duration-300 border-t-4 border-amber-500 p-6 text-center cursor-pointer">
+                <div class="card-body items-center p-4">
+                    <div class="text-5xl mb-4">📇</div>
+                    <h3 class="text-xl font-bold uppercase text-gray-700">Referenti</h3>
+                    <p class="text-sm text-gray-400">Contatti Ufficiali</p>
+                </div>
+            </a>
+
+            <!-- 3. ALTRI SOGGETTI (Spostato da servizi.html) -->
+            <a href="gestione_altri.html" class="card bg-white shadow-lg hover:-translate-y-2 transition-all duration-300 border-t-4 border-indigo-500 p-6 text-center cursor-pointer">
+                <div class="card-body items-center p-4">
+                    <div class="text-5xl mb-4">👥</div>
+                    <h3 class="text-xl font-bold uppercase text-gray-700">Altri Soggetti</h3>
+                    <p class="text-sm text-gray-400">Collaboratori e Secondari</p>
+                </div>
+            </a>
+
+        </div>
+    </div>
+
+    <!-- Script Auth -->
+    <script src="/assets/js/auth.js"></script>
+</body>
+</html>

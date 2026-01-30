@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <title>Gestione Mailing List - Gestionale</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .row-selected { background-color: #d1fae5 !important; } /* green-100 */
+        .cursor-pointer { cursor: pointer; }
+    </style>
+</head>
+<body class="bg-base-200 min-h-screen">
+
+    <!-- Navbar -->
+    <div class="navbar bg-base-100 shadow-md px-4">
+        <div class="flex-1">
+            <a href="dashboard_servizi.html" class="btn btn-sm btn-ghost gap-2">
+                <i class="fa-solid fa-arrow-left"></i> Torna a Servizi
+            </a>
+        </div>
+        <div class="flex-none">
+            <h1 class="text-xl font-bold px-4">Gestione Mailing List</h1>
+        </div>
+    </div>
+
+    <div class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- COLONNA SINISTRA: Lista delle Mailing List -->
+        <div class="lg:col-span-3 space-y-4">
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body p-4">
+                    <h2 class="card-title text-sm uppercase text-gray-500">Nuova Lista</h2>
+                    <form id="formCreaLista" class="space-y-3">
+                        <input type="text" id="descrizioneLista" placeholder="Descrizione (Obbligatoria)" class="input input-bordered w-full input-sm" required />
+                        <textarea id="noteLista" placeholder="Note (Opzionale)" class="textarea textarea-bordered w-full textarea-sm"></textarea>
+                        <button type="submit" class="btn btn-primary btn-sm w-full">Crea Lista</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card bg-base-100 shadow-xl overflow-hidden">
+                <div class="card-body p-0">
+                    <div class="bg-gray-100 p-3 font-bold text-gray-600 border-b">Elenchi Salvati</div>
+                    <div class="overflow-y-auto max-h-[600px]">
+                        <ul id="elencoListe" class="menu w-full p-2 rounded-box text-sm">
+                            <!-- Popolato via JS -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COLONNA DESTRA: Gestione Dettaglio Lista -->
+        <div class="lg:col-span-9">
+            <!-- Messaggio Placeholder -->
+            <div id="noSelection" class="flex flex-col items-center justify-center h-full text-gray-400 opacity-60">
+                <i class="fa-regular fa-envelope-open text-6xl mb-4"></i>
+                <p class="text-xl">Seleziona una lista per gestirla</p>
+            </div>
+
+            <!-- Contenuto Gestione -->
+            <div id="gestioneListaContainer" class="hidden space-y-4">
+                
+                <!-- Header Lista Selezionata -->
+                <div class="card bg-white shadow-sm border-l-8 border-teal-500">
+                    <div class="card-body py-3 flex flex-row justify-between items-center flex-wrap gap-4">
+                        <div>
+                            <h2 id="currentListName" class="text-2xl font-bold text-gray-800"></h2>
+                            <p id="currentListNotes" class="text-sm text-gray-500 italic"></p>
+                        </div>
+                        <div class="flex gap-2">
+                            <!-- Dropdown Export -->
+                            <div class="dropdown dropdown-end">
+                                <label tabindex="0" class="btn btn-sm btn-outline btn-info gap-2">
+                                    <i class="fa-solid fa-file-export"></i> Esporta
+                                </label>
+                                <ul tabindex="0" class="dropdown-content z-[10] menu p-2 shadow bg-base-100 rounded-box w-64">
+                                    <li><a onclick="esportaLista('clipboard')"><i class="fa-regular fa-copy"></i> Copia Appunti</a></li>
+                                    <li><a onclick="esportaLista('csv')"><i class="fa-solid fa-file-csv"></i> Scarica CSV</a></li>
+                                    <li><a onclick="apriModalEML()"><i class="fa-regular fa-envelope"></i> Genera File .EML</a></li>
+                                </ul>
+                            </div>
+                            
+                            <button onclick="eliminaListaCorrente()" class="btn btn-error btn-sm btn-outline">
+                                <i class="fa-solid fa-trash"></i> Elimina
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SEZIONE RICERCA CON TAB -->
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body p-4">
+                        <div class="tabs tabs-boxed bg-gray-100 mb-4">
+                            <a class="tab tab-active" onclick="switchTab(1)" id="tab-1">Associazioni</a> 
+                            <a class="tab" onclick="switchTab(2)" id="tab-2">Referenti</a> 
+                            <a class="tab" onclick="switchTab(3)" id="tab-3">Altri Soggetti</a>
+                        </div>
+
+                        <!-- TAB 1: ASSOCIAZIONI -->
+                        <div id="content-tab-1" class="tab-content block">
+                            <div class="flex gap-2 mb-2 items-center">
+                                <select id="filterTipologia" class="select select-bordered select-sm w-1/4">
+                                    <option value="">Tutte le Tipologie</option>
+                                    <!-- Popolato JS -->
+                                </select>
+                                <input type="text" id="searchAssocInput" class="input input-bordered input-sm w-full" placeholder="Cerca Associazione, Referente, Altri (min 3 caratteri)..." />
+                                <button onclick="cerca('associazioni')" class="btn btn-sm btn-primary"><i class="fa-solid fa-search"></i></button>
+                            </div>
+                            <div class="text-xs text-gray-500 mb-2 italic">Doppio click sulla riga per aggiungere/rimuovere. Seleziona A/CC/CCN per confermare.</div>
+                            <div class="overflow-x-auto max-h-60 border rounded">
+                                <table class="table table-xs table-pin-rows">
+                                    <thead><tr><th>Associazione</th><th>Mail</th><th>Info</th><th>Azioni</th></tr></thead>
+                                    <tbody id="res-associazioni"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- TAB 2: REFERENTI -->
+                        <div id="content-tab-2" class="tab-content hidden">
+                            <div class="flex gap-2 mb-2">
+                                <input type="text" id="searchReferentiInput" class="input input-bordered input-sm w-full" placeholder="Cerca Nome Referente o Associazione (min 3 caratteri)..." />
+                                <button onclick="cerca('referenti')" class="btn btn-sm btn-primary"><i class="fa-solid fa-search"></i></button>
+                            </div>
+                            <div class="text-xs text-gray-500 mb-2 italic">Visualizzati solo Referenti con mail valida.</div>
+                            <div class="overflow-x-auto max-h-60 border rounded">
+                                <table class="table table-xs table-pin-rows">
+                                    <thead><tr><th>Nominativo</th><th>Associazione</th><th>Mail</th><th>Azioni</th></tr></thead>
+                                    <tbody id="res-referenti"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- TAB 3: ALTRI SOGGETTI -->
+                        <div id="content-tab-3" class="tab-content hidden">
+                            <div class="flex gap-2 mb-2">
+                                <input type="text" id="searchAltriInput" class="input input-bordered input-sm w-full" placeholder="Cerca Nome o Associazione (min 3 caratteri)..." />
+                                <button onclick="cerca('altrisoggetti')" class="btn btn-sm btn-primary"><i class="fa-solid fa-search"></i></button>
+                            </div>
+                            <div class="text-xs text-gray-500 mb-2 italic">Visualizzati solo Altri Soggetti con mail valida.</div>
+                            <div class="overflow-x-auto max-h-60 border rounded">
+                                <table class="table table-xs table-pin-rows">
+                                    <thead><tr><th>Nominativo</th><th>Associazione</th><th>Mail</th><th>Azioni</th></tr></thead>
+                                    <tbody id="res-altrisoggetti"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Tabella Membri Lista -->
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body p-0">
+                        <div class="p-4 border-b flex justify-between items-center bg-teal-50 rounded-t-xl">
+                            <h3 class="font-bold text-teal-800">
+                                <i class="fa-solid fa-list-check"></i> Composizione Lista
+                            </h3>
+                            <span id="countMembri" class="badge badge-teal font-bold">0</span>
+                        </div>
+                        <div class="overflow-x-auto h-[400px]">
+                            <table class="table table-sm table-pin-rows">
+                                <thead>
+                                    <tr>
+                                        <th>Associazione / Nominativo</th>
+                                        <th>Email</th>
+                                        <th class="w-24">Tipo Invio</th>
+                                        <th class="text-right w-16"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabellaMembri">
+                                    <!-- Righe Popolate via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL GENERAZIONE EML -->
+    <dialog id="modal_eml" class="modal">
+        <form method="dialog" class="modal-box">
+            <h3 class="font-bold text-lg"><i class="fa-regular fa-envelope"></i> Genera File .EML</h3>
+            <p class="py-2 text-sm text-error font-bold">Nota: I dati inseriti qui servono solo per generare il file e NON verranno salvati nel database.</p>
+            
+            <div class="form-control w-full mb-3">
+                <label class="label"><span class="label-text">Oggetto</span></label>
+                <input type="text" id="emlSubject" placeholder="Oggetto della mail..." class="input input-bordered w-full" />
+            </div>
+            
+            <div class="form-control w-full mb-4">
+                <label class="label"><span class="label-text">Testo / Corpo</span></label>
+                <textarea id="emlBody" class="textarea textarea-bordered h-24" placeholder="Scrivi qui il testo..."></textarea>
+            </div>
+            
+            <div class="modal-action">
+                <button class="btn btn-ghost">Annulla</button>
+                <button type="button" onclick="generaEMLDownload()" class="btn btn-primary">Scarica .EML</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Script Logica -->
+    <script>
+        let selectedListId = null;
+        let currentMembers = []; // Cache membri attuali
+        let currentMembersMap = new Map(); // Mappa per lookup veloce: Email -> {IDRiga, Tipo}
+
+        document.addEventListener('DOMContentLoaded', () => {
+            caricaListe();
+            caricaTipologie();
+            
+            // Enter key listeners
+            document.getElementById('searchAssocInput').addEventListener('keyup', e => { if(e.key==='Enter') cerca('associazioni'); });
+            document.getElementById('searchReferentiInput').addEventListener('keyup', e => { if(e.key==='Enter') cerca('referenti'); });
+            document.getElementById('searchAltriInput').addEventListener('keyup', e => { if(e.key==='Enter') cerca('altrisoggetti'); });
+
+            document.getElementById('formCreaLista').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const desc = document.getElementById('descrizioneLista').value;
+                const note = document.getElementById('noteLista').value;
+                try {
+                    const res = await fetch('/api/maillist', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ Descrizione: desc, Note: note })
+                    });
+                    const data = await res.json();
+                    if(data.success) {
+                        document.getElementById('formCreaLista').reset();
+                        caricaListe();
+                    } else alert("Errore: " + data.error);
+                } catch(err) { console.error(err); }
+            });
+        });
+
+        // --- GESTIONE TABS ---
+        function switchTab(num) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
+            document.getElementById(`tab-${num}`).classList.add('tab-active');
+            
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('block'));
+            
+            document.getElementById(`content-tab-${num}`).classList.remove('hidden');
+            document.getElementById(`content-tab-${num}`).classList.add('block');
+        }
+
+        async function caricaTipologie() {
+            try {
+                const res = await fetch('/api/tipologie');
+                const rows = await res.json();
+                const sel = document.getElementById('filterTipologia');
+                rows.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.ID;
+                    opt.textContent = t.Tipologia;
+                    sel.appendChild(opt);
+                });
+            } catch(e) { console.error(e); }
+        }
+
+        async function caricaListe() {
+            try {
+                const res = await fetch('/api/maillist');
+                const liste = await res.json();
+                const container = document.getElementById('elencoListe');
+                container.innerHTML = '';
+                liste.forEach(lista => {
+                    const li = document.createElement('li');
+                    const isActive = selectedListId === lista.ID ? 'active' : '';
+                    li.innerHTML = `<a onclick="selezionaLista(${lista.ID}, '${lista.Descrizione.replace(/'/g, "\\'")}', '${(lista.Note||'').replace(/'/g, "\\'")}')" class="${isActive}">${lista.Descrizione}</a>`;
+                    container.appendChild(li);
+                });
+            } catch(e) { console.error(e); }
+        }
+
+        function selezionaLista(id, desc, note) {
+            selectedListId = id;
+            document.getElementById('currentListName').textContent = desc;
+            document.getElementById('currentListNotes').textContent = note;
+            document.getElementById('noSelection').classList.add('hidden');
+            document.getElementById('gestioneListaContainer').classList.remove('hidden');
+            
+            // Reset Risultati Ricerca
+            document.getElementById('res-associazioni').innerHTML = '';
+            document.getElementById('res-referenti').innerHTML = '';
+            document.getElementById('res-altrisoggetti').innerHTML = '';
+
+            caricaMembriLista();
+            caricaListe(); 
+        }
+
+        async function caricaMembriLista() {
+            if(!selectedListId) return;
+            try {
+                const res = await fetch(`/api/maillist/${selectedListId}/members`);
+                currentMembers = await res.json();
+                
+                // Mappa per lookup rapido: Key=EmailLower, Value={IDRiga, TipoInvio}
+                currentMembersMap.clear();
+                currentMembers.forEach(m => {
+                    currentMembersMap.set(m.Indirizzo.toLowerCase(), { id: m.ID, tipo: m.TipoInvio });
+                });
+
+                document.getElementById('countMembri').textContent = currentMembers.length;
+                renderTabellaMembri();
+                
+                // Ricarica la ricerca attuale per aggiornare gli stati evidenziati
+                const activeTab = document.querySelector('.tab-active').id.split('-')[1];
+                if(activeTab == 1 && document.getElementById('res-associazioni').hasChildNodes()) cerca('associazioni');
+                if(activeTab == 2 && document.getElementById('res-referenti').hasChildNodes()) cerca('referenti');
+                if(activeTab == 3 && document.getElementById('res-altrisoggetti').hasChildNodes()) cerca('altrisoggetti');
+
+            } catch(e) { console.error(e); }
+        }
+
+        function renderTabellaMembri() {
+            const tbody = document.getElementById('tabellaMembri');
+            tbody.innerHTML = '';
+            currentMembers.forEach(r => {
+                const tr = document.createElement('tr');
+                let badgeClass = r.TipoInvio === 'A' ? 'badge-primary' : (r.TipoInvio === 'CC' ? 'badge-info' : 'badge-ghost');
+                
+                tr.innerHTML = `
+                    <td class="font-semibold text-xs">${r.SOGGETTO}</td>
+                    <td>
+                        <div class="font-mono text-xs">${r.Indirizzo}</div>
+                        ${r.Predefinito ? '<span class="text-[9px] text-green-600 font-bold">PREDEFINITO</span>' : ''}
+                    </td>
+                    <td>
+                         <div class="dropdown dropdown-hover dropdown-left">
+                            <label tabindex="0" class="badge ${badgeClass} badge-sm cursor-pointer">${r.TipoInvio || 'CCN'}</label>
+                            <ul tabindex="0" class="dropdown-content z-[1] menu p-1 shadow bg-base-100 rounded-box w-16">
+                                <li><a onclick="cambiaTipo(${r.ID}, 'A')" class="text-xs px-2 py-1">A</a></li>
+                                <li><a onclick="cambiaTipo(${r.ID}, 'CC')" class="text-xs px-2 py-1">CC</a></li>
+                                <li><a onclick="cambiaTipo(${r.ID}, 'CCN')" class="text-xs px-2 py-1">CCN</a></li>
+                            </ul>
+                        </div>
+                    </td>
+                    <td class="text-right">
+                        <button onclick="rimuoviMembro(${r.ID})" class="btn btn-ghost btn-xs text-error"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function cerca(tipo) {
+            let url = '';
+            let q = '';
+            let resContainer = null;
+            
+            if (tipo === 'associazioni') {
+                q = document.getElementById('searchAssocInput').value;
+                const tip = document.getElementById('filterTipologia').value;
+                if (q.length < 3 && !tip) { alert("Inserisci almeno 3 caratteri o filtra per tipologia"); return; }
+                url = `/api/maillist/search/associazioni?q=${encodeURIComponent(q)}&tipo=${tip}`;
+                resContainer = document.getElementById('res-associazioni');
+            } 
+            else if (tipo === 'referenti') {
+                q = document.getElementById('searchReferentiInput').value;
+                if (q.length < 3) { alert("Inserisci almeno 3 caratteri"); return; }
+                url = `/api/maillist/search/referenti?q=${encodeURIComponent(q)}`;
+                resContainer = document.getElementById('res-referenti');
+            }
+            else if (tipo === 'altrisoggetti') {
+                q = document.getElementById('searchAltriInput').value;
+                if (q.length < 3) { alert("Inserisci almeno 3 caratteri"); return; }
+                url = `/api/maillist/search/altrisoggetti?q=${encodeURIComponent(q)}`;
+                resContainer = document.getElementById('res-altrisoggetti');
+            }
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                renderRisultati(tipo, data, resContainer);
+            } catch(e) { console.error(e); }
+        }
+
+        function renderRisultati(tipo, rows, container) {
+            container.innerHTML = '';
+            if (rows.length === 0) {
+                container.innerHTML = '<tr><td colspan="4" class="text-center text-gray-400">Nessun risultato</td></tr>';
+                return;
+            }
+
+            rows.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = "hover cursor-pointer select-none"; // Enable double click visual cue
+                
+                // Estrai dati comuni
+                let email = row.Email || row.Indirizzo;
+                let assocName = row.SOGGETTO || '';
+                let name = row.Nominativo || ''; // Per referenti/altri
+                let idMail = row.IDMail || null; // Solo per associazioni
+                let idAssoc = row.IDAssoc; 
+                let isPredef = row.Predefinito === 1;
+
+                // Controlla se già presente
+                const existing = currentMembersMap.get(email.toLowerCase());
+                
+                if (existing) {
+                    tr.classList.add("row-selected");
+                    // Se esiste, mostra pulsante Rimuovi e Badge Tipo
+                    tr.innerHTML = getRowHTML(tipo, name, assocName, email, isPredef, true, existing.tipo, existing.id);
+                    tr.ondblclick = () => rimuoviMembro(existing.id);
+                } else {
+                    // Se non esiste, mostra pulsanti aggiungi
+                    tr.innerHTML = getRowHTML(tipo, name, assocName, email, isPredef, false, null, null);
+                    // Passiamo i dati grezzi per l'aggiunta
+                    tr.ondblclick = () => toggleSelectionDisplay(tr, idMail, email, idAssoc);
+                }
+                
+                container.appendChild(tr);
+            });
+        }
+
+        // Helper per HTML riga
+        function getRowHTML(tabType, name, assoc, email, isPredef, exists, tipoInvio, idRigaLista) {
+            let col1 = tabType === 'associazioni' ? assoc : name;
+            let col2 = tabType === 'associazioni' ? '' : assoc; // Colonna 2 vuota per associazioni, nome assoc per altri
+            let predefBadge = isPredef ? '<span class="badge badge-xs badge-success ml-2">Predef</span>' : '';
+            
+            // HTML Azioni
+            let actions = '';
+            if (exists) {
+                actions = `
+                    <span class="badge badge-sm badge-neutral mr-2">${tipoInvio}</span>
+                    <button class="btn btn-xs btn-circle btn-ghost text-error" onclick="rimuoviMembro(${idRigaLista})"><i class="fa-solid fa-times"></i></button>
+                `;
+            } else {
+                // Placeholder per pulsanti che appaiono al click/hover (o click su riga)
+                // Usiamo un container con ID unico per iniettare i bottoni
+                actions = `<span class="text-[10px] text-gray-400">Doppio click</span>`;
+            }
+
+            if (tabType === 'associazioni') {
+                return `<td>${col1}</td><td>${email} ${predefBadge}</td><td class="text-xs text-gray-400">Assoc.</td><td class="text-right action-cell">${actions}</td>`;
+            } else {
+                return `<td>${col1}</td><td>${col2}</td><td>${email}</td><td class="text-right action-cell">${actions}</td>`;
+            }
+        }
+
+        // Gestisce la visualizzazione dei bottoni A/CC/CCN quando si clicca su una riga non selezionata
+        function toggleSelectionDisplay(tr, idMail, email, idAssoc) {
+            const cell = tr.querySelector('.action-cell');
+            // Se stiamo già mostrando i bottoni, annulla
+            if (cell.querySelector('.btn-join')) {
+                cell.innerHTML = `<span class="text-[10px] text-gray-400">Doppio click</span>`;
+                return;
+            }
+            
+            // Crea bottoni
+            const div = document.createElement('div');
+            div.className = "join btn-join";
+            div.innerHTML = `
+                <button class="btn btn-xs join-item btn-primary" onclick="aggiungiMembro('${idMail}', '${email}', '${idAssoc}', 'A')">A</button>
+                <button class="btn btn-xs join-item btn-info" onclick="aggiungiMembro('${idMail}', '${email}', '${idAssoc}', 'CC')">CC</button>
+                <button class="btn btn-xs join-item btn-neutral" onclick="aggiungiMembro('${idMail}', '${email}', '${idAssoc}', 'CCN')">CCN</button>
+            `;
+            cell.innerHTML = '';
+            cell.appendChild(div);
+        }
+
+        async function aggiungiMembro(idMail, email, idAssoc, tipo) {
+            // idMail potrebbe essere 'null' stringa se viene da referenti
+            const payload = {
+                IDMail: (idMail && idMail !== 'null') ? idMail : null,
+                EmailRaw: email,
+                IDAssociazione: idAssoc,
+                TipoInvio: tipo
+            };
+
+            try {
+                const res = await fetch(`/api/maillist/${selectedListId}/add`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    caricaMembriLista(); // Ricarica tutto e aggiorna anche le ricerche
+                } else {
+                    alert("Errore inserimento: " + data.error);
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function rimuoviMembro(idRiga) {
+            try {
+                const res = await fetch(`/api/maillist/member/${idRiga}`, { method: 'DELETE' });
+                if ((await res.json()).success) caricaMembriLista();
+            } catch(e) { console.error(e); }
+        }
+
+        async function cambiaTipo(idRiga, nuovoTipo) {
+            try {
+                const res = await fetch(`/api/maillist/member/${idRiga}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ TipoInvio: nuovoTipo })
+                });
+                if ((await res.json()).success) caricaMembriLista();
+            } catch(e) { console.error(e); }
+        }
+
+        async function eliminaListaCorrente() {
+            if(!selectedListId || !confirm("Eliminare questa lista?")) return;
+            try {
+                const res = await fetch(`/api/maillist/${selectedListId}`, { method: 'DELETE' });
+                if ((await res.json()).success) {
+                    selectedListId = null;
+                    document.getElementById('gestioneListaContainer').classList.add('hidden');
+                    document.getElementById('noSelection').classList.remove('hidden');
+                    caricaListe();
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        // --- EXPORT ---
+        function esportaLista(modo) {
+            if(!currentMembers.length) { alert("Lista vuota"); return; }
+            
+            if (modo === 'clipboard') {
+                const map = { 'A': [], 'CC': [], 'CCN': [] };
+                currentMembers.forEach(m => {
+                    const t = m.TipoInvio || 'CCN';
+                    map[t].push(`"${m.SOGGETTO.replace(/"/g, '')}" <${m.Indirizzo}>`);
+                });
+                let txt = "";
+                if(map.A.length) txt += "A: " + map.A.join('; ') + "\n";
+                if(map.CC.length) txt += "CC: " + map.CC.join('; ') + "\n";
+                if(map.CCN.length) txt += "CCN: " + map.CCN.join('; ');
+                navigator.clipboard.writeText(txt).then(() => alert("Copiato!"));
+            } 
+            else if (modo === 'csv') {
+                let csv = "Nome,Email,Tipo\n" + currentMembers.map(m => `"${m.SOGGETTO.replace(/"/g,'""')}","${m.Indirizzo}","${m.TipoInvio||'CCN'}"`).join('\n');
+                const a = document.createElement('a');
+                a.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+                a.download = 'lista.csv';
+                a.click();
+            }
+        }
+
+        // --- EML LOGIC ---
+        function apriModalEML() {
+            if(!currentMembers.length) { alert("Lista vuota"); return; }
+            document.getElementById('modal_eml').showModal();
+        }
+
+        function generaEMLDownload() {
+            const subject = document.getElementById('emlSubject').value || "Oggetto Mail";
+            const body = document.getElementById('emlBody').value || "";
+            
+            // Raggruppa destinatari
+            const map = { 'To': [], 'Cc': [], 'Bcc': [] };
+            currentMembers.forEach(m => {
+                const dest = `"${m.SOGGETTO.replace(/"/g, '')}" <${m.Indirizzo}>`;
+                if(m.TipoInvio === 'A') map.To.push(dest);
+                else if(m.TipoInvio === 'CC') map.Cc.push(dest);
+                else map.Bcc.push(dest);
+            });
+
+            // Se A è vuoto, usa placeholder per evitare spam filter issues
+            const toHeader = map.To.length > 0 ? map.To.join(', ') : "undisclosed-recipients:;";
+
+            // Costruzione EML
+            let emlContent = `MIME-Version: 1.0\n`;
+            emlContent += `X-Unsent: 1\n`; // Tratta come bozza
+            emlContent += `Subject: ${subject}\n`;
+            emlContent += `To: ${toHeader}\n`;
+            if (map.Cc.length) emlContent += `Cc: ${map.Cc.join(', ')}\n`;
+            if (map.Bcc.length) emlContent += `Bcc: ${map.Bcc.join(', ')}\n`;
+            emlContent += `Content-Type: text/plain; charset=UTF-8\n\n`;
+            emlContent += body;
+
+            const blob = new Blob([emlContent], { type: 'message/rfc822' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${subject.replace(/[^a-z0-9]/gi, '_').substring(0, 20)}.eml`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+</body>
+</html>

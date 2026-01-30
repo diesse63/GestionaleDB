@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dettaglio Ente - Gestionale</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .blink-red { animation: blinker 1.5s linear infinite; color: red; cursor: pointer; }
+        @keyframes blinker { 50% { opacity: 0; } }
+    </style>
+</head>
+<body class="bg-base-200 min-h-screen p-6 flex flex-col items-center">
+
+    <!-- Header -->
+    <div class="w-full max-w-5xl flex justify-between items-center mb-4">
+        <div>
+            <h1 class="text-3xl font-black text-blue-800 uppercase">Scheda Anagrafica</h1>
+            <p class="text-gray-500 text-sm">Gestione dettagliata ente</p>
+        </div>
+        <div class="flex gap-2">
+            <!-- Icona RUNTS -->
+            <div id="btnRuntsIcon" class="hidden flex items-center bg-white px-3 py-1 rounded shadow cursor-pointer border" onclick="clickRuntsIcon()">
+                <span class="mr-2 font-bold text-xs">RUNTS</span>
+                <svg id="svgRunts" class="w-6 h-6 text-gray-400" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                    <path d="M20 20L17 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CARD -->
+    <div class="card bg-white shadow-xl w-full max-w-5xl overflow-visible">
+        <div class="card-body">
+            
+            <form id="mainForm" onsubmit="return false;">
+                <input type="hidden" id="ID_ENTE">
+
+                <!-- DATI PRINCIPALI -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="form-control md:col-span-2">
+                        <label class="label font-bold">Denominazione / Ragione Sociale</label>
+                        <input type="text" id="SOGGETTO" class="input input-bordered focus:input-primary font-bold text-lg" required oninput="setDirty()">
+                    </div>
+                    <div class="form-control">
+                        <label class="label font-bold">Codice Fiscale / P.IVA</label>
+                        <input type="text" id="CODICEFISCALE" class="input input-bordered uppercase tracking-wider" maxlength="16" oninput="setDirty()">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-gray-200">
+                    <!-- SX: Tipologia -->
+                    <div>
+                        <div class="form-control mb-4">
+                            <label class="label font-bold">Tipologia Ente</label>
+                            <select id="ID_TIPOLOGIA" class="select select-bordered w-full" onchange="toggleIncarichi(); setDirty()">
+                                <!-- Popolato JS -->
+                            </select>
+                        </div>
+
+                        <div id="divIncarichi" class="bg-blue-50 p-4 rounded-lg border border-blue-100 hidden">
+                            <div class="grid grid-cols-2 gap-4">
+                                <label class="label cursor-pointer justify-start gap-3">
+                                    <input type="checkbox" id="TAVOLO" class="toggle toggle-primary" onchange="setDirty()">
+                                    <span class="label-text font-bold text-blue-900">Membro Tavolo</span>
+                                </label>
+                                <label class="label cursor-pointer justify-start gap-3">
+                                    <input type="checkbox" id="DIRETTIVO_DELEGAZIONE" class="toggle toggle-secondary" onchange="setDirty()">
+                                    <span class="label-text font-bold text-pink-900">Membro Direttivo</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DX: Email e Telefono -->
+                    <div class="flex flex-col gap-4">
+                        <div class="alert alert-warning text-xs p-2 shadow-sm rounded-lg flex items-center gap-2">
+                            <span>⚠️ Le modifiche a Email, Telefoni e Soggetti vengono salvate immediatamente.</span>
+                        </div>
+
+                        <!-- SEZIONE EMAIL -->
+                        <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 flex flex-col h-1/2">
+                            <h3 id="headerEmail" class="font-bold text-gray-700 uppercase text-xs mb-3 flex items-center gap-2">
+                                📧 Indirizzi Email / PEC
+                            </h3>
+                            <ul id="listaEmail" class="flex-grow space-y-1 overflow-y-auto max-h-[120px] mb-3 bg-white p-2 rounded border"></ul>
+                            
+                            <!-- Input Email -->
+                            <div class="flex flex-col gap-2 mt-auto">
+                                <input type="hidden" id="emailIdEditing">
+                                <div class="flex gap-2">
+                                    <input type="email" id="newEmailAddr" placeholder="indirizzo@email.com" class="input input-sm input-bordered w-full">
+                                    <label class="cursor-pointer label p-0 gap-1 flex items-center" title="È PEC?">
+                                        <input type="checkbox" id="newEmailPEC" class="checkbox checkbox-sm checkbox-primary">
+                                        <span class="label-text text-xs font-bold">PEC</span>
+                                    </label>
+                                    <label class="cursor-pointer label p-0 gap-1 flex items-center" title="Predefinito?">
+                                        <input type="checkbox" id="newEmailDef" class="checkbox checkbox-sm checkbox-warning">
+                                        <span class="label-text text-xs font-bold">★</span>
+                                    </label>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="resetInputEmail()" id="btnCancelEmail" class="btn btn-xs btn-ghost hidden">Annulla</button>
+                                    <button onclick="gestisciEmail()" id="btnSaveEmail" class="btn btn-sm btn-primary text-white flex-grow">➕ Aggiungi Email</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SEZIONE TELEFONO -->
+                        <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 flex flex-col h-1/2">
+                            <h3 id="headerTel" class="font-bold text-gray-700 uppercase text-xs mb-3 flex items-center gap-2">
+                                📞 Recapiti Telefonici
+                            </h3>
+                            <ul id="listaTelefono" class="flex-grow space-y-1 overflow-y-auto max-h-[120px] mb-3 bg-white p-2 rounded border"></ul>
+                            
+                            <!-- Input Telefono -->
+                            <div class="flex flex-col gap-2 mt-auto">
+                                <input type="hidden" id="telIdEditing">
+                                <div class="flex gap-2">
+                                    <input type="text" id="newTelNum" placeholder="Es. 055 123456" class="input input-sm input-bordered w-full">
+                                    <label class="cursor-pointer label p-0 gap-1 flex items-center" title="Predefinito?">
+                                        <input type="checkbox" id="newTelDef" class="checkbox checkbox-sm checkbox-warning">
+                                        <span class="label-text text-xs font-bold">★</span>
+                                    </label>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="resetInputTel()" id="btnCancelTel" class="btn btn-xs btn-ghost hidden">Annulla</button>
+                                    <button onclick="gestisciTelefono()" id="btnSaveTel" class="btn btn-sm btn-secondary text-white flex-grow">➕ Aggiungi Tel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SOGGETTI COLLEGATI -->
+                <div class="mt-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        <!-- Referenti -->
+                        <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                            <h4 class="font-black text-indigo-900 uppercase text-sm mb-3">👤 Legale Rappresentante</h4>
+                            <ul id="listaReferenti" class="space-y-2 mb-4 max-h-[200px] overflow-y-auto"></ul>
+                            
+                            <div class="bg-white p-2 rounded border border-indigo-200">
+                                <input type="hidden" id="refIdEditing">
+                                <input type="text" id="newReferente" placeholder="Nome Cognome" class="input input-sm input-bordered w-full mb-2 font-bold">
+                                <input type="text" id="mailReferente" placeholder="Email personale (opz)" class="input input-sm input-bordered w-full mb-2">
+                                <div class="flex gap-2">
+                                    <button onclick="resetInputRef()" id="btnCancelRef" class="btn btn-xs btn-ghost hidden">Annulla</button>
+                                    <button onclick="gestisciSoggetto('Referenti')" id="btnSaveRef" class="btn btn-sm btn-indigo-600 hover:bg-indigo-700 text-white w-full border-none">➕ Aggiungi/Salva</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Altri Soggetti -->
+                        <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                            <h4 class="font-black text-emerald-900 uppercase text-sm mb-3">👥 Altri Soggetti</h4>
+                            <ul id="listaAltri" class="space-y-2 mb-4 max-h-[200px] overflow-y-auto"></ul>
+                            
+                            <div class="bg-white p-2 rounded border border-emerald-200">
+                                <input type="hidden" id="altIdEditing">
+                                <input type="text" id="newAltro" placeholder="Nome Soggetto" class="input input-sm input-bordered w-full mb-2 font-bold">
+                                <input type="text" id="mailAltro" placeholder="Email (opz)" class="input input-sm input-bordered w-full mb-2">
+                                <div class="flex gap-2">
+                                    <button onclick="resetInputAlt()" id="btnCancelAlt" class="btn btn-xs btn-ghost hidden">Annulla</button>
+                                    <button onclick="gestisciSoggetto('Altri')" id="btnSaveAlt" class="btn btn-sm btn-emerald-600 hover:bg-emerald-700 text-white w-full border-none">➕ Aggiungi/Salva</button>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </form>
+        </div>
+
+        <!-- ACTION BAR -->
+        <div class="bg-gray-100 p-4 rounded-b-xl flex justify-between items-center border-t border-gray-300 sticky bottom-0 z-10">
+            <button onclick="eliminaEnte()" class="btn btn-error btn-outline btn-sm">
+                🗑️ Elimina Ente
+            </button>
+            <div class="flex gap-3">
+                <button id="mainActionBtn" onclick="gestisciChiusura()" class="btn px-8 bg-gray-400 hover:bg-gray-500 text-white border-none shadow">
+                    Chiudi
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Logica -->
+    <script>
+        let hasChanges = false;
+        let currentId = null;
+        let runtsStatus = null;
+        let runtsData = null;
+        
+        // Nuove variabili per Cesvot
+        let missingMails = [];
+        let missingPhones = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+            currentId = params.get('id');
+            if(!currentId) { alert("ID mancante"); window.location.href='anagrafica.html'; return; }
+
+            document.getElementById('ID_ENTE').value = currentId;
+            await caricaTipologie();
+            await caricaDatiEnte();
+        });
+
+        function setDirty() {
+            hasChanges = true;
+            const btn = document.getElementById('mainActionBtn');
+            btn.innerText = "💾 Salva Modifiche";
+            btn.classList.remove('bg-gray-400', 'hover:bg-gray-500');
+            btn.classList.add('btn-success', 'text-white');
+        }
+
+        async function caricaTipologie() {
+            try {
+                const res = await fetch('/api/tipologie');
+                const list = await res.json();
+                const sel = document.getElementById('ID_TIPOLOGIA');
+                list.forEach(t => sel.innerHTML += `<option value="${t.ID}">${t.Tipologia}</option>`);
+            } catch(e){console.error(e);}
+        }
+
+        async function caricaDatiEnte() {
+            try {
+                const res = await fetch('/api/associazioni');
+                const all = await res.json();
+                const ente = all.find(e => e.ID == currentId);
+                if(!ente) { alert("Ente non trovato"); window.location.href='anagrafica.html'; return; }
+
+                document.getElementById('SOGGETTO').value = ente.SOGGETTO;
+                document.getElementById('CODICEFISCALE').value = ente.CODICEFISCALE || '';
+                document.getElementById('ID_TIPOLOGIA').value = ente.ID_TIPOLOGIA;
+                document.getElementById('TAVOLO').checked = (ente.TAVOLO == 1);
+                document.getElementById('DIRETTIVO_DELEGAZIONE').checked = (ente.DIRETTIVO_DELEGAZIONE == 1);
+                
+                toggleIncarichi();
+                
+                await Promise.all([caricaEmail(), caricaTelefono(), caricaSoggetti()]);
+                
+                checkRunts();
+                
+                // NUOVO: Controllo Cesvot
+                checkCesvotDiscrepancies();
+
+                hasChanges = false;
+                const btn = document.getElementById('mainActionBtn');
+                btn.innerText = "Chiudi";
+                btn.classList.add('bg-gray-400', 'hover:bg-gray-500');
+                btn.classList.remove('btn-success');
+
+            } catch(e){console.error(e);}
+        }
+
+        async function gestisciChiusura() {
+            if (hasChanges) {
+                await salvaPrincipale();
+            } else {
+                window.location.href = 'anagrafica.html';
+            }
+        }
+
+        async function salvaPrincipale() {
+            const payload = {
+                SOGGETTO: document.getElementById('SOGGETTO').value.toUpperCase(),
+                CODICEFISCALE: document.getElementById('CODICEFISCALE').value.toUpperCase().replace(/\s/g, ''),
+                ID_TIPOLOGIA: document.getElementById('ID_TIPOLOGIA').value,
+                TAVOLO: document.getElementById('TAVOLO').checked,
+                DIRETTIVO_DELEGAZIONE: document.getElementById('DIRETTIVO_DELEGAZIONE').checked
+            };
+
+            if (runtsStatus === 'OFF' && !confirm("ATTENZIONE: I dati non sono allineati con RUNTS. Salvare comunque?")) return;
+
+            try {
+                const res = await fetch(`/api/associazioni/${currentId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                if(res.ok) {
+                    hasChanges = false;
+                    const btn = document.getElementById('mainActionBtn');
+                    btn.innerText = "Chiudi";
+                    btn.classList.add('bg-gray-400', 'hover:bg-gray-500');
+                    btn.classList.remove('btn-success');
+                } else { alert("Errore Salvataggio"); }
+            } catch(e){console.error(e);}
+        }
+
+        function toggleIncarichi() {
+            const val = document.getElementById('ID_TIPOLOGIA').value;
+            const div = document.getElementById('divIncarichi');
+            if(val == '1') div.classList.remove('hidden'); else div.classList.add('hidden');
+        }
+
+        // --- GESTIONE SOGGETTI ---
+        async function caricaSoggetti() {
+            const [rRef, rAlt] = await Promise.all([fetch('/api/all-referenti'), fetch('/api/all-altri-soggetti')]);
+            const allRef = await rRef.json();
+            const allAlt = await rAlt.json();
+            
+            const myRef = allRef.filter(r => r.ID_Associazione == currentId);
+            const myAlt = allAlt.filter(a => a.ID_Associazione == currentId);
+
+            document.getElementById('listaReferenti').innerHTML = myRef.map(r => `
+                <li class="flex justify-between items-center bg-white p-2 rounded shadow-sm border border-l-4 border-l-indigo-400">
+                    <div>
+                        <div class="font-bold text-gray-800">${r.Nome}</div>
+                        <div class="text-xs text-gray-400">${r.MAILREFERENTE || ''}</div>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="editRef(${r.ID}, '${r.Nome.replace(/'/g,"\\'")}', '${(r.MAILREFERENTE||'').replace(/'/g,"\\'")}')" class="btn btn-xs btn-ghost">✏️</button>
+                        <button onclick="delSoggetto('referenti',${r.ID})" class="btn btn-xs btn-ghost text-red-500">✕</button>
+                    </div>
+                </li>
+            `).join('');
+
+            document.getElementById('listaAltri').innerHTML = myAlt.map(r => `
+                <li class="flex justify-between items-center bg-white p-2 rounded shadow-sm border border-l-4 border-l-emerald-400">
+                    <div>
+                        <div class="font-bold text-gray-800">${r.Nome}</div>
+                        <div class="text-xs text-gray-400">${r.MAILALTRISOGGETTI || ''}</div>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="editAlt(${r.ID}, '${r.Nome.replace(/'/g,"\\'")}', '${(r.MAILALTRISOGGETTI||'').replace(/'/g,"\\'")}')" class="btn btn-xs btn-ghost">✏️</button>
+                        <button onclick="delSoggetto('altri-soggetti',${r.ID})" class="btn btn-xs btn-ghost text-red-500">✕</button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        async function gestisciSoggetto(tipo) {
+            let endpoint = tipo === 'Referenti' ? '/api/referenti' : '/api/altri-soggetti';
+            let nomeField = tipo === 'Referenti' ? 'newReferente' : 'newAltro';
+            let mailField = tipo === 'Referenti' ? 'mailReferente' : 'mailAltro';
+            let idField = tipo === 'Referenti' ? 'refIdEditing' : 'altIdEditing';
+            
+            let nome = document.getElementById(nomeField).value;
+            let mail = document.getElementById(mailField).value;
+            let id = document.getElementById(idField).value;
+
+            if(!nome) return alert("Inserire nome");
+            if(mail && !isValidEmail(mail)) return alert("Indirizzo email non valido");
+
+            let payload = { ID_Associazione: currentId, Nome: nome.toUpperCase() };
+            if(tipo === 'Referenti') payload.MAILREFERENTE = mail; else payload.MAILALTRISOGGETTI = mail;
+
+            let method = id ? 'PUT' : 'POST';
+            let url = id ? `${endpoint}/${id}` : endpoint;
+
+            await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+            
+            if(tipo === 'Referenti') resetInputRef(); else resetInputAlt();
+            caricaSoggetti();
+        }
+
+        async function delSoggetto(tipoApi, id) {
+            if(confirm("Eliminare definitivamente questo soggetto?")) {
+                await fetch(`/api/${tipoApi}/${id}`, {method:'DELETE'});
+                caricaSoggetti();
+            }
+        }
+
+        function editRef(id, n, m) { document.getElementById('refIdEditing').value = id; document.getElementById('newReferente').value = n; document.getElementById('mailReferente').value = m; document.getElementById('btnSaveRef').innerText = "Salva"; document.getElementById('btnCancelRef').classList.remove('hidden'); }
+        function resetInputRef() { document.getElementById('refIdEditing').value=''; document.getElementById('newReferente').value=''; document.getElementById('mailReferente').value=''; document.getElementById('btnSaveRef').innerText = "➕ Aggiungi"; document.getElementById('btnCancelRef').classList.add('hidden'); }
+        function editAlt(id, n, m) { document.getElementById('altIdEditing').value = id; document.getElementById('newAltro').value = n; document.getElementById('mailAltro').value = m; document.getElementById('btnSaveAlt').innerText = "Salva"; document.getElementById('btnCancelAlt').classList.remove('hidden'); }
+        function resetInputAlt() { document.getElementById('altIdEditing').value=''; document.getElementById('newAltro').value=''; document.getElementById('mailAltro').value=''; document.getElementById('btnSaveAlt').innerText = "➕ Aggiungi"; document.getElementById('btnCancelAlt').classList.add('hidden'); }
+
+        // --- GESTIONE EMAIL ---
+        async function caricaEmail() {
+            const res = await fetch(`/api/associazioni/${currentId}/mail`);
+            const mails = await res.json();
+            document.getElementById('listaEmail').innerHTML = mails.map(m => `
+                <li class="flex justify-between items-center text-sm p-1 hover:bg-gray-100 rounded">
+                    <div>
+                        ${m.Predefinito ? '<span class="text-yellow-500 mr-1">⭐</span>' : ''}
+                        <span class="${m.PEC ? 'text-blue-700 font-bold' : 'text-gray-700'}">${m.Indirizzo}</span>
+                        ${m.PEC ? '<span class="text-[10px] bg-blue-100 text-blue-800 px-1 rounded ml-1">PEC</span>' : ''}
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="editMail(${m.ID}, '${m.Indirizzo}', ${m.PEC}, ${m.Predefinito})" class="text-blue-500 font-bold px-1">✏️</button>
+                        <button onclick="delMail(${m.ID})" class="text-red-500 font-bold px-1">✕</button>
+                    </div>
+                </li>
+            `).join('');
+        }
+        
+        async function gestisciEmail() {
+            let id = document.getElementById('emailIdEditing').value;
+            let ind = document.getElementById('newEmailAddr').value;
+            let pec = document.getElementById('newEmailPEC').checked;
+            let def = document.getElementById('newEmailDef').checked;
+            
+            if(!ind) return;
+            if(!isValidEmail(ind)) return alert("Indirizzo email formalmente errato.");
+
+            let method = id ? 'PUT' : 'POST';
+            let url = id ? `/api/mail/${id}` : '/api/mail';
+            
+            await fetch(url, {
+                method, 
+                headers:{'Content-Type':'application/json'}, 
+                body:JSON.stringify({IDAssociazione:currentId, Indirizzo:ind, PEC:pec, Predefinito:def})
+            });
+            resetInputEmail();
+            caricaEmail();
+        }
+
+        async function delMail(id) { if(confirm("Eliminare indirizzo?")) { await fetch(`/api/mail/${id}`, {method:'DELETE'}); caricaEmail(); } }
+        function editMail(id, addr, pec, def) { document.getElementById('emailIdEditing').value=id; document.getElementById('newEmailAddr').value=addr; document.getElementById('newEmailPEC').checked=pec; document.getElementById('newEmailDef').checked=def; document.getElementById('btnSaveEmail').innerText="Salva"; document.getElementById('btnCancelEmail').classList.remove('hidden'); }
+        function resetInputEmail() { document.getElementById('emailIdEditing').value=''; document.getElementById('newEmailAddr').value=''; document.getElementById('newEmailPEC').checked=false; document.getElementById('newEmailDef').checked=false; document.getElementById('btnSaveEmail').innerText="➕ Aggiungi"; document.getElementById('btnCancelEmail').classList.add('hidden'); }
+
+        // --- GESTIONE TELEFONO ---
+        async function caricaTelefono() {
+            try {
+                const res = await fetch(`/api/associazioni/${currentId}/telefono`);
+                const tels = await res.json();
+                document.getElementById('listaTelefono').innerHTML = tels.map(t => `
+                    <li class="flex justify-between items-center text-sm p-1 hover:bg-gray-100 rounded">
+                        <div>
+                            ${t.Predefinito ? '<span class="text-yellow-500 mr-1">⭐</span>' : ''}
+                            <span class="text-gray-700 font-mono">${t.Telefono}</span>
+                        </div>
+                        <div class="flex gap-1">
+                            <button onclick="editTel(${t.ID}, '${t.Telefono}', ${t.Predefinito})" class="text-blue-500 font-bold px-1">✏️</button>
+                            <button onclick="delTel(${t.ID})" class="text-red-500 font-bold px-1">✕</button>
+                        </div>
+                    </li>
+                `).join('');
+            } catch(e) { console.log('API telefono non trovata o vuota'); }
+        }
+
+        async function gestisciTelefono() {
+            let id = document.getElementById('telIdEditing').value;
+            let num = document.getElementById('newTelNum').value;
+            let def = document.getElementById('newTelDef').checked;
+            
+            if(!num) return;
+
+            let method = id ? 'PUT' : 'POST';
+            let url = id ? `/api/telefono/${id}` : '/api/telefono';
+            
+            await fetch(url, {
+                method, 
+                headers:{'Content-Type':'application/json'}, 
+                body:JSON.stringify({IDAssociazione:currentId, Telefono:num, Predefinito:def})
+            });
+            resetInputTel();
+            caricaTelefono();
+        }
+
+        async function delTel(id) { if(confirm("Eliminare numero?")) { await fetch(`/api/telefono/${id}`, {method:'DELETE'}); caricaTelefono(); } }
+        function editTel(id, num, def) { document.getElementById('telIdEditing').value=id; document.getElementById('newTelNum').value=num; document.getElementById('newTelDef').checked=def; document.getElementById('btnSaveTel').innerText="Salva"; document.getElementById('btnCancelTel').classList.remove('hidden'); }
+        function resetInputTel() { document.getElementById('telIdEditing').value=''; document.getElementById('newTelNum').value=''; document.getElementById('newTelDef').checked=false; document.getElementById('btnSaveTel').innerText="➕ Aggiungi"; document.getElementById('btnCancelTel').classList.add('hidden'); }
+
+        // --- UTILS ---
+        function isValidEmail(email) {
+            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        }
+
+        // --- RUNTS LOGIC ---
+        async function checkRunts() {
+            try {
+                const res = await fetch(`/api/runts/check/${currentId}`);
+                const data = await res.json();
+                const iconDiv = document.getElementById('btnRuntsIcon');
+                const svg = document.getElementById('svgRunts');
+
+                if(data.status === 'MISSING') {
+                    iconDiv.classList.add('hidden');
+                } else {
+                    iconDiv.classList.remove('hidden');
+                    runtsData = data.runtsData;
+                    runtsStatus = data.status;
+
+                    if(data.status === 'ON') {
+                        svg.classList.add('text-green-600');
+                        svg.classList.remove('text-red-500', 'text-gray-400');
+                        iconDiv.title = "Allineato con RUNTS";
+                    } else {
+                        svg.classList.add('text-red-500');
+                        svg.classList.remove('text-green-600', 'text-gray-400');
+                        iconDiv.title = "Dati disallineati! Clicca per allineare.";
+                    }
+                }
+            } catch(e){}
+        }
+
+        async function clickRuntsIcon() {
+            if(runtsStatus !== 'OFF') return;
+            if(!confirm(`Allineare con i dati RUNTS?\n\nCF: ${runtsData.CodiceFiscale}\nLegale Rappr: ${runtsData.Cognome} ${runtsData.Nome}`)) return;
+
+            await fetch(`/api/runts/align/${currentId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({cfRunts: runtsData.CodiceFiscale})
+            });
+            window.location.reload();
+        }
+
+        async function eliminaEnte() {
+            if(confirm("Sei sicuro di voler eliminare DEFINITIVAMENTE questo Ente e tutti i dati collegati?")) {
+                await fetch(`/api/associazioni/${currentId}`, {method:'DELETE'});
+                window.location.href = 'anagrafica.html';
+            }
+        }
+
+        // --- CESVOT CHECK LOGIC ---
+        async function checkCesvotDiscrepancies() {
+            try {
+                const res = await fetch(`/api/cesvot/check/${currentId}`);
+                const data = await res.json();
+                
+                if (data.checkPerformed) {
+                    missingMails = data.missingMails;
+                    missingPhones = data.missingPhones;
+
+                    const hEmail = document.getElementById('headerEmail');
+                    const hTel = document.getElementById('headerTel');
+
+                    // Reset icone
+                    const existingIcons = document.querySelectorAll('.cesvot-warn');
+                    existingIcons.forEach(el => el.remove());
+
+                    // Segnalazione Email
+                    if(missingMails.length > 0) {
+                        const icon = document.createElement('span');
+                        icon.innerHTML = '🚨';
+                        icon.className = 'cesvot-warn ml-auto blink-red text-lg';
+                        icon.title = `Trovate ${missingMails.length} email in Cesvot non presenti qui. Clicca per importare.`;
+                        icon.onclick = () => importCesvotData('mail');
+                        hEmail.appendChild(icon);
+                    }
+
+                    // Segnalazione Telefono
+                    if(missingPhones.length > 0) {
+                        const icon = document.createElement('span');
+                        icon.innerHTML = '🚨';
+                        icon.className = 'cesvot-warn ml-auto blink-red text-lg';
+                        icon.title = `Trovati ${missingPhones.length} numeri in Cesvot non presenti qui. Clicca per importare.`;
+                        icon.onclick = () => importCesvotData('phone');
+                        hTel.appendChild(icon);
+                    }
+                }
+            } catch(e) { console.error("Errore controllo Cesvot", e); }
+        }
+
+        async function importCesvotData(type) {
+            const list = type === 'mail' ? missingMails : missingPhones;
+            if(list.length === 0) return;
+
+            const msg = `Trovati i seguenti dati nel database Cesvot:\n\n${list.join('\n')}\n\nVuoi importarli ora?`;
+            if(!confirm(msg)) return;
+
+            try {
+                const res = await fetch('/api/cesvot/import', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ idAssoc: currentId, type: type, items: list })
+                });
+                
+                if(res.ok) {
+                    if(type === 'mail') await caricaEmail();
+                    else await caricaTelefono();
+                    checkCesvotDiscrepancies(); // Ricontrolla per rimuovere icona
+                } else {
+                    alert("Errore durante l'importazione.");
+                }
+            } catch(e) { console.error(e); alert("Errore di rete."); }
+        }
+
+    </script>
+</body>
+</html>

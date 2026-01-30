@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menu Principale</title>
+    <!-- Librerie Stile -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-base-200 min-h-screen relative flex items-center justify-center">
+
+    <!-- Tasto Logout -->
+    <button onclick="logout()" class="btn btn-sm btn-error text-white absolute top-4 right-4 shadow-md z-10">
+        Esci 🚪
+    </button>
+
+    <div class="container mx-auto p-6 max-w-5xl">
+        
+        <!-- Titolo -->
+        <div class="text-center mb-10">
+            <h1 class="text-5xl font-black uppercase text-base-content mb-2">
+                Dashboard
+            </h1>
+            <p class="text-xl text-gray-500">Seleziona un'area operativa</p>
+        </div>
+
+        <!-- FILA SUPERIORE: Eventi e Anagrafica -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            
+            <!-- 1. GESTIONE EVENTI (Agorà) -->
+            <a href="/agora" class="card bg-white shadow-xl hover:-translate-y-2 transition-all duration-300 border-b-8 border-emerald-500 p-8 text-center group cursor-pointer h-full">
+                <div class="card-body items-center p-0 justify-center">
+                    <div class="text-6xl mb-4 transform group-hover:scale-110 transition-transform">
+                        🏛️
+                    </div>
+                    <!-- Aggiunto ID per cambiare testo via JS se necessario -->
+                    <h2 id="titoloEventi" class="text-2xl font-black uppercase text-emerald-600">
+                        Gestione Eventi
+                    </h2>
+                    <p class="text-gray-400 mt-2">Agorà, Verbali e Riunioni</p>
+                </div>
+            </a>
+
+            <!-- 2. GESTIONE ANAGRAFICA (ID per nascondere) -->
+            <a id="cardAnagrafica" href="dashboard_anagrafica.html" class="card bg-white shadow-xl hover:-translate-y-2 transition-all duration-300 border-b-8 border-blue-600 p-8 text-center group cursor-pointer h-full">
+                <div class="card-body items-center p-0 justify-center">
+                    <div class="text-6xl mb-4 transform group-hover:scale-110 transition-transform">
+                        👥
+                    </div>
+                    <h2 class="text-2xl font-black uppercase text-blue-700">
+                        Gestione Anagrafica
+                    </h2>
+                    <p class="text-gray-400 mt-2">Enti, Referenti e Soggetti</p>
+                </div>
+            </a>
+
+        </div>
+
+        <!-- FILA INFERIORE: Servizi -->
+        <div class="flex justify-center">
+            <div class="w-full md:w-2/3 lg:w-1/2">
+                
+                <!-- 3. SERVIZI (ID per nascondere) -->
+                <a id="cardServizi" href="dashboard_servizi.html" class="card bg-white shadow-xl hover:-translate-y-2 transition-all duration-300 border-b-8 border-violet-600 p-8 text-center group cursor-pointer">
+                    <div class="card-body items-center p-0 justify-center">
+                        <div class="text-6xl mb-4 transform group-hover:scale-110 transition-transform">
+                            ⚙️
+                        </div>
+                        <h2 class="text-2xl font-black uppercase text-violet-700">
+                            Servizi
+                        </h2>
+                        <p class="text-gray-400 mt-2">Tabelle di sistema e Configurazioni</p>
+                    </div>
+                </a>
+
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Script Auth Esistente -->
+    <script src="/assets/js/auth.js"></script>
+    
+    <!-- Script Gestione Ruoli -->
+    <script>
+        document.addEventListener("DOMContentLoaded", async () => {
+            try {
+                const response = await fetch('/api/me');
+                if (!response.ok) return; // Gestito da auth.js
+                const user = await response.json();
+
+                if (!user.isAdmin) {
+                    // Se NON è admin, nascondi Anagrafica e Servizi
+                    const anagrafica = document.getElementById('cardAnagrafica');
+                    const servizi = document.getElementById('cardServizi');
+                    
+                    if (anagrafica) anagrafica.style.display = 'none';
+                    if (servizi) servizi.style.display = 'none';
+
+                    // Rinomina "Gestione Eventi" in "Registro Eventi"
+                    const titoloEventi = document.getElementById('titoloEventi');
+                    if (titoloEventi) titoloEventi.innerText = "Registro Eventi";
+                }
+            } catch (error) {
+                console.error("Errore verifica ruolo:", error);
+            }
+        });
+    </script>
+
+</body>
+</html>

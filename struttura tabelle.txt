@@ -1,43 +1,113 @@
 BEGIN TRANSACTION;
-CREATE TABLE IF NOT EXISTS "Utenti" (
-	"Email"	TEXT,
-	"Password"	TEXT,
-	"Nome"	TEXT
-);
 CREATE TABLE IF NOT EXISTS "Tipologia" (
 	"ID"	INTEGER,
 	"Tipologia"	TEXT NOT NULL UNIQUE,
 	PRIMARY KEY("ID" AUTOINCREMENT)
-);
-CREATE TABLE IF NOT EXISTS "Associazioni" (
-	"ID"	INTEGER,
-	"ID_TIPOLOGIA"	INTEGER NOT NULL,
-	"COLONNA3"	TEXT,
-	"TAVOLO"	INTEGER NOT NULL CHECK("TAVOLO" IN (0, 1)),
-	"DIRETTIVO_DELEGAZIONE"	INTEGER NOT NULL CHECK("DIRETTIVO_DELEGAZIONE" IN (0, 1)),
-	"SOGGETTO"	TEXT NOT NULL UNIQUE,
-	"MAIL"	TEXT,
-	"PEC"	TEXT,
-	PRIMARY KEY("ID" AUTOINCREMENT),
-	FOREIGN KEY("ID_TIPOLOGIA") REFERENCES "Tipologia"("ID") ON UPDATE CASCADE ON DELETE RESTRICT
 );
 CREATE TABLE IF NOT EXISTS "Referenti" (
 	"ID"	INTEGER,
 	"ID_Associazione"	INTEGER NOT NULL,
 	"Nome"	TEXT NOT NULL,
 	"MAILREFERENTE"	TEXT,
+	FOREIGN KEY("ID_Associazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
 	PRIMARY KEY("ID" AUTOINCREMENT),
-	UNIQUE("ID_Associazione","Nome"),
-	FOREIGN KEY("ID_Associazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE CASCADE
+	UNIQUE("ID_Associazione","Nome")
 );
 CREATE TABLE IF NOT EXISTS "AltriSoggetti" (
 	"ID"	INTEGER,
 	"ID_Associazione"	INTEGER NOT NULL,
 	"Nome"	TEXT NOT NULL,
 	"MAILALTRISOGGETTI"	TEXT,
+	FOREIGN KEY("ID_Associazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
 	PRIMARY KEY("ID" AUTOINCREMENT),
-	UNIQUE("ID_Associazione","Nome"),
-	FOREIGN KEY("ID_Associazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE CASCADE
+	UNIQUE("ID_Associazione","Nome")
+);
+CREATE TABLE IF NOT EXISTS "Associazioni" (
+	"ID"	INTEGER,
+	"ID_TIPOLOGIA"	INTEGER NOT NULL,
+	"COLONNA3"	TEXT,
+	"TAVOLO"	BLOB NOT NULL CHECK("TAVOLO" IN (0, 1)),
+	"DIRETTIVO_DELEGAZIONE"	INTEGER NOT NULL CHECK("DIRETTIVO_DELEGAZIONE" IN (0, 1)),
+	"SOGGETTO"	TEXT NOT NULL UNIQUE,
+	"CODICEFISCALE"	TEXT,
+	FOREIGN KEY("ID_TIPOLOGIA") REFERENCES "Tipologia"("ID") ON UPDATE CASCADE ON DELETE RESTRICT,
+	PRIMARY KEY("ID" AUTOINCREMENT)
+);
+CREATE TABLE IF NOT EXISTS "Mail" (
+	"ID"	INTEGER,
+	"IDAssociazione"	INTEGER NOT NULL,
+	"Indirizzo"	TEXT NOT NULL,
+	"PEC"	INTEGER DEFAULT 0 CHECK("PEC" IN (0, 1)),
+	"Predefinito"	INTEGER DEFAULT 0 CHECK("Predefinito" IN (0, 1)),
+	FOREIGN KEY("IDAssociazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
+	PRIMARY KEY("ID" AUTOINCREMENT),
+	UNIQUE("IDAssociazione","Indirizzo")
+);
+CREATE TABLE IF NOT EXISTS "Runts" (
+	"CodiceFiscale"	TEXT UNIQUE,
+	"Denominazione"	TEXT,
+	"Cognome"	TEXT,
+	"Nome"	TEXT,
+	"IDAssociazione"	INTEGER,
+	"Provincia"	TEXT,
+	PRIMARY KEY("CodiceFiscale")
+);
+CREATE TABLE IF NOT EXISTS "Telefono" (
+	"ID"	INTEGER,
+	"IDAssociazione"	INTEGER NOT NULL,
+	"Telefono"	TEXT NOT NULL,
+	"Predefinito"	INTEGER DEFAULT 0,
+	FOREIGN KEY("IDAssociazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
+	PRIMARY KEY("ID" AUTOINCREMENT),
+	UNIQUE("IDAssociazione","Telefono")
+);
+CREATE TABLE IF NOT EXISTS "CesvotTelefono" (
+	"ID"	INTEGER,
+	"Denominazione"	TEXT,
+	"Telefono"	TEXT,
+	PRIMARY KEY("ID" AUTOINCREMENT),
+	UNIQUE("Denominazione","Telefono")
+);
+CREATE TABLE IF NOT EXISTS "CesvotMail" (
+	"ID"	INTEGER,
+	"Denominazione"	TEXT,
+	"Mail"	TEXT,
+	PRIMARY KEY("ID" AUTOINCREMENT),
+	UNIQUE("Denominazione","Mail")
+);
+CREATE TABLE IF NOT EXISTS "Temporanea" (
+	"SOGGETTO"	TEXT,
+	"MAIL"	TEXT
+);
+CREATE TABLE IF NOT EXISTS "MailList" (
+	"ID"	INTEGER NOT NULL,
+	"Descrizione"	TEXT NOT NULL UNIQUE,
+	"Note"	TEXT,
+	PRIMARY KEY("ID" AUTOINCREMENT)
+);
+CREATE TABLE IF NOT EXISTS "ListaMail" (
+	"ID"	INTEGER,
+	"IDListaMail"	INTEGER NOT NULL,
+	"IDMail"	INTEGER NOT NULL,
+	"TipoInvio"	TEXT DEFAULT 'CCN',
+	PRIMARY KEY("ID" AUTOINCREMENT),
+	FOREIGN KEY("IDMail") REFERENCES "Mail"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
+	UNIQUE("IDListaMail","IDMail")
+);
+CREATE TABLE IF NOT EXISTS "AgoraTipoEvento" (
+	"ID"	INTEGER NOT NULL,
+	"IntestazionePagina"	TEXT NOT NULL,
+	PRIMARY KEY("ID" AUTOINCREMENT)
+);
+CREATE TABLE IF NOT EXISTS "Agora_old" (
+	"ID"	INTEGER NOT NULL,
+	"Data"	TEXT NOT NULL,
+	"Evento"	TEXT,
+	"ODG"	TEXT,
+	"Verbale"	TEXT,
+	"Documenti"	TEXT,
+	"IDTipoEvento"	INTEGER NOT NULL,
+	PRIMARY KEY("ID")
 );
 CREATE TABLE IF NOT EXISTS "Agora" (
 	"ID"	INTEGER NOT NULL,
@@ -46,6 +116,43 @@ CREATE TABLE IF NOT EXISTS "Agora" (
 	"ODG"	TEXT,
 	"Verbale"	TEXT,
 	"Documenti"	TEXT,
-	PRIMARY KEY("ID")
+	"IDTipoEvento"	INTEGER NOT NULL,
+	PRIMARY KEY("ID"),
+	FOREIGN KEY("IDTipoEvento") REFERENCES "AgoraTipoEvento"("ID") ON DELETE RESTRICT
+);
+CREATE TABLE IF NOT EXISTS "AgoraPresenti" (
+	"ID"	INTEGER,
+	"IDRiunioni"	INTEGER NOT NULL,
+	"IDAssociazione"	INTEGER NOT NULL,
+	"Rappresentante"	TEXT,
+	PRIMARY KEY("ID" AUTOINCREMENT),
+	FOREIGN KEY("IDRiunioni") REFERENCES "Agora"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
+	FOREIGN KEY("IDAssociazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE RESTRICT,
+	UNIQUE("IDRiunioni","IDAssociazione","Rappresentante")
+);
+CREATE TABLE IF NOT EXISTS "Utenti" (
+	"ID"	INTEGER,
+	"Nome"	TEXT,
+	"Email"	TEXT UNIQUE,
+	"Password"	TEXT,
+	"Amministratore"	INTEGER DEFAULT 0,
+	PRIMARY KEY("ID" AUTOINCREMENT)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_mail" ON "Mail" (
+	"IDAssociazione",
+	"Indirizzo"
 );
 COMMIT;
+
+
+
+nessuna modifica alle funzioni esistenti solo aggiornamenti necessari. 
+nessuna modifica al layout esistente
+verficare il collegamento tra associazioni e referenti e altri soggetti e tutti gli altri collegamenti
+per una corretta visualizzazione dei dati 
+
+
+quando importa i dati da runts il referente di un'associazione è presente verificare che corrisponda e 
+modificare solo se diverso. stampare al termine della procedura un report 
+in pdf che elenchi i record che hanno subito modifiche e il dettaglio dei campi modificati
+ 

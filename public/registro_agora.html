@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <title>Registro Agorà - Gestionale Pro</title>
+    <!-- Importazione Stili e Librerie -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-base-200 min-h-screen relative">
+    
+    <!-- Tasto Indietro -->
+    <a href="index.html" class="btn btn-sm btn-neutral absolute top-4 left-4 shadow-md z-10">
+        ⬅ Torna alla Home
+    </a>
+
+    <!-- Container Principale -->
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl mt-12">
+        
+        <!-- Intestazione Pagina Dinamica -->
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+            <div>
+                <!-- Il titolo cambia in base alla selezione -->
+                <h1 id="page-title" class="text-5xl font-black text-gray-900 uppercase italic text-blue-600">Caricamento...</h1>
+                <p class="text-gray-500 font-bold uppercase text-xs mt-2 ml-1">Gestione Eventi, Verbali e Documenti</p>
+            </div>
+            
+            <div class="flex flex-col md:flex-row gap-4 items-end md:items-center">
+                
+                <!-- SELETTORE TIPO EVENTO (Filtro Principale) -->
+                <div class="form-control w-full md:w-64">
+                    <label class="label py-0">
+                        <span class="label-text-alt font-bold uppercase text-gray-500">Seleziona Registro</span>
+                    </label>
+                    <select id="tipoEventoSelect" onchange="changeTipoEvento()" class="select select-bordered shadow-lg w-full font-bold text-blue-800">
+                        <!-- Popolato via JS -->
+                    </select>
+                </div>
+
+                <!-- Barra di Ricerca -->
+                <input type="text" id="searchInput" placeholder="Cerca nel registro..." class="input input-bordered shadow-xl w-full md:w-64" onkeyup="filterTable()" />
+                
+                <!-- Bottone Nuovo (ID aggiunto per nasconderlo se user) -->
+                <label id="btn-new-event" for="modal-agora" onclick="preparaNuovo()" class="btn bg-blue-600 border-none text-white shadow-lg rounded-xl uppercase">
+                    <i data-lucide="plus-circle"></i> Nuovo
+                </label>
+            </div>
+        </div>
+
+        <!-- Card Tabella -->
+        <div class="card bg-white shadow-2xl rounded-3xl overflow-hidden min-h-[400px]">
+            <div class="overflow-x-auto">
+                <table class="table w-full">
+                    <!-- Intestazione Colonne -->
+                    <thead class="bg-gray-900 text-white uppercase text-xs">
+                        <tr>
+                            <th class="py-6 px-8 w-32 align-top">Data</th>
+                            <th class="align-top">Evento</th>
+                            <th class="align-top">Anteprima ODG</th>
+                            <th class="text-center align-top">Verbale</th>
+                            <th class="text-center align-top">Doc</th>
+                            <th class="text-right px-8 align-top">Azione</th>
+                        </tr>
+                    </thead>
+                    <!-- Corpo Tabella (popolato via JS) -->
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale (Popup) per Inserimento/Modifica -->
+    <input type="checkbox" id="modal-agora" class="modal-toggle" />
+    <div class="modal">
+        <div class="modal-box rounded-3xl p-8 max-w-5xl"> 
+            <h3 id="modal-title" class="font-black text-2xl uppercase mb-6 border-b-4 border-blue-600 pb-2 text-blue-600 italic">Dettaglio Evento</h3>
+            
+            <form id="agoraForm" class="space-y-4">
+                <input type="hidden" id="ago-id">
+                <input type="hidden" id="ago-tipo-id">
+                
+                <!-- Riga 1: Data e Titolo -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-control">
+                        <label class="label text-xs font-bold text-gray-400 uppercase">Data Evento</label>
+                        <input type="date" id="ago-data" required class="input input-bordered font-bold text-gray-700">
+                    </div>
+                    <div class="form-control md:col-span-2">
+                        <label class="label text-xs font-bold text-gray-400 uppercase">Titolo Evento</label>
+                        <input type="text" id="ago-evento" required class="input input-bordered font-bold uppercase" placeholder="Es. ASSEMBLEA ORDINARIA">
+                    </div>
+                </div>
+
+                <!-- Riga 2: ODG -->
+                <div class="form-control">
+                    <label class="label text-xs font-bold text-gray-400 uppercase">Ordine del Giorno</label>
+                    <textarea id="ago-odg" class="textarea textarea-bordered h-24 font-medium text-sm" placeholder="Inserisci i punti..."></textarea>
+                </div>
+
+                <!-- SEZIONE REGISTRO PRESENZE -->
+                <div class="bg-base-100 p-5 rounded-xl border border-gray-200 mt-4 shadow-sm">
+                    <h4 class="font-black text-sm uppercase text-gray-500 mb-3 flex items-center gap-2">
+                        <i data-lucide="users" class="w-4 h-4"></i> Registro Presenze
+                    </h4>
+                    
+                    <!-- Area Aggiunta Partecipante (ID per nascondere) -->
+                    <div id="add-partecipante-area" class="grid grid-cols-1 md:grid-cols-12 gap-2 mb-4 p-3 bg-blue-50 rounded-lg hidden">
+                        <div class="md:col-span-3">
+                            <input type="text" id="filter-people-input" placeholder="Filtra Associazione/Nome..." 
+                                   class="input input-bordered input-sm w-full text-xs uppercase" 
+                                   onkeyup="loadUniqueOptions(this.value)">
+                        </div>
+                        <div class="md:col-span-7">
+                            <select id="new-unique-select" class="select select-bordered select-sm w-full uppercase text-xs">
+                                <option value="" disabled selected>Seleziona Partecipante...</option>
+                            </select>
+                        </div>
+                        <div class="md:col-span-2 text-right">
+                            <button type="button" onclick="handleAddPresente()" class="btn btn-sm btn-primary w-full text-white font-bold"><i data-lucide="plus"></i> Agg.</button>
+                        </div>
+                    </div>
+
+                    <!-- Tabella Presenze -->
+                    <div class="overflow-x-auto w-full max-h-60">
+                        <table class="table table-xs w-full bg-white">
+                            <thead class="bg-gray-100 text-gray-600 uppercase sticky top-0 z-10">
+                                <tr>
+                                    <th>Associazione</th>
+                                    <th class="w-8"></th>
+                                    <th class="w-8"></th>
+                                    <th>Rappresentante</th>
+                                    <th class="w-10 text-right"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="presentiTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SEZIONE FILE -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <!-- Verbale -->
+                    <div class="form-control bg-gray-50 p-4 rounded-xl border border-dashed border-gray-300">
+                        <label class="label text-xs font-bold text-gray-400 uppercase">Verbale (PDF)</label>
+                        <div id="view-verbale" class="hidden flex items-center justify-between bg-white p-2 rounded border mb-2">
+                            <span id="name-verbale" class="text-xs font-bold truncate max-w-[150px]"></span>
+                            <div class="flex gap-1">
+                                <a id="link-verbale" href="#" target="_blank" class="btn btn-xs btn-info text-white"><i data-lucide="eye" class="w-3"></i></a>
+                                <button type="button" id="btn-del-verbale" onclick="rimuoviFile('verbale')" class="btn btn-xs btn-error text-white"><i data-lucide="x" class="w-3"></i></button>
+                            </div>
+                        </div>
+                        <!-- ID per nascondere input file se User -->
+                        <div id="input-container-verbale">
+                            <input type="file" id="ago-verbale-file" accept=".pdf" class="file-input file-input-bordered file-input-sm w-full" />
+                        </div>
+                        <input type="hidden" id="delete-verbale-flag" value="false">
+                    </div>
+
+                    <!-- Documenti -->
+                    <div class="form-control bg-gray-50 p-4 rounded-xl border border-dashed border-gray-300">
+                        <label class="label text-xs font-bold text-gray-400 uppercase">Documenti (PDF)</label>
+                        <div id="view-docs" class="hidden flex items-center justify-between bg-white p-2 rounded border mb-2">
+                            <span id="name-docs" class="text-xs font-bold truncate max-w-[150px]"></span>
+                            <div class="flex gap-1">
+                                <a id="link-docs" href="#" target="_blank" class="btn btn-xs btn-info text-white"><i data-lucide="eye" class="w-3"></i></a>
+                                <button type="button" id="btn-del-docs" onclick="rimuoviFile('docs')" class="btn btn-xs btn-error text-white"><i data-lucide="x" class="w-3"></i></button>
+                            </div>
+                        </div>
+                        <!-- ID per nascondere input file se User -->
+                        <div id="input-container-docs">
+                            <input type="file" id="ago-docs-file" accept=".pdf" class="file-input file-input-bordered file-input-sm w-full" />
+                        </div>
+                        <input type="hidden" id="delete-docs-flag" value="false">
+                    </div>
+                </div>
+
+                <!-- Bottoni Azione -->
+                <div class="modal-action flex justify-between mt-8">
+                    <!-- ID per nascondere se User -->
+                    <button type="button" id="btn-delete" onclick="handleDelete()" class="btn btn-error btn-outline hidden uppercase font-bold text-xs">Elimina Evento</button>
+                    
+                    <div class="flex gap-2 ml-auto">
+                        <label for="modal-agora" class="btn btn-ghost uppercase text-xs font-bold font-black">Chiudi</label>
+                        <!-- ID per nascondere se User -->
+                        <button type="button" id="btn-save" onclick="handleSave()" class="btn bg-blue-600 border-none text-white font-bold uppercase px-8 text-xs shadow-lg">Salva</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Script Auth Esistente -->
+    <script src="assets/js/auth.js"></script>
+    
+    <!-- Logica JavaScript -->
+    <script>
+        let localDataCache = [];
+        let allPeopleCache = [];
+        let eventTypesCache = [];
+        let currentTypeId = null;
+        
+        // Stato Admin
+        let isAdminUser = false;
+
+        document.addEventListener('DOMContentLoaded', init);
+
+        async function init() {
+            try {
+                // 1. Controlla Ruolo
+                const authRes = await fetch('/api/me');
+                if(authRes.ok) {
+                    const userData = await authRes.json();
+                    isAdminUser = userData.isAdmin === true;
+                }
+
+                // UI: Nascondi tasto Nuovo se non admin
+                if(!isAdminUser) {
+                    const btnNew = document.getElementById('btn-new-event');
+                    if(btnNew) btnNew.style.display = 'none';
+                }
+
+                // 2. Carica Persone (per le presenze)
+                const resPeople = await fetch('/api/persone/tutti');
+                allPeopleCache = await resPeople.json();
+                loadUniqueOptions(); 
+
+                // 3. Carica Tipi Evento e inizializza la Select
+                const resTypes = await fetch('/api/agora-tipi');
+                eventTypesCache = await resTypes.json();
+                
+                const typeSelect = document.getElementById('tipoEventoSelect');
+                typeSelect.innerHTML = '';
+                
+                if (eventTypesCache.length > 0) {
+                    eventTypesCache.forEach((t, index) => {
+                        const opt = document.createElement('option');
+                        opt.value = t.ID;
+                        opt.text = t.IntestazionePagina;
+                        typeSelect.appendChild(opt);
+                    });
+                    
+                    // Seleziona il primo o quello in memoria
+                    currentTypeId = eventTypesCache[0].ID;
+                    typeSelect.value = currentTypeId;
+                    
+                    // 4. Carica i dati per il tipo selezionato
+                    await changeTipoEvento();
+                } else {
+                    document.getElementById('page-title').innerText = "NESSUN TIPO EVENTO DEFINITO";
+                }
+
+            } catch(e){ 
+                console.error("Errore inizializzazione:", e);
+            }
+        }
+
+        async function changeTipoEvento() {
+            const select = document.getElementById('tipoEventoSelect');
+            currentTypeId = select.value;
+            
+            // Aggiorna Titolo Pagina
+            const selectedType = eventTypesCache.find(t => t.ID == currentTypeId);
+            if (selectedType) {
+                document.getElementById('page-title').innerText = selectedType.IntestazionePagina;
+            }
+
+            // Carica Dati filtrati dal server
+            await loadEvents(currentTypeId);
+        }
+
+        async function loadEvents(typeId) {
+            try {
+                const res = await fetch(`/api/agora?tipo=${typeId}`); 
+                const data = await res.json();
+                localDataCache = data || [];
+                renderTable(localDataCache);
+            } catch(e) {
+                console.error("Errore caricamento eventi:", e);
+                renderTable([]);
+            }
+        }
+
+        // Popola il Select Unico Presenze
+        function loadUniqueOptions(filterText = "") {
+            const sel = document.getElementById('new-unique-select');
+            const currentVal = sel.value; 
+            sel.innerHTML = '<option value="" disabled selected>SELEZIONA PARTECIPANTE</option>';
+            
+            const search = filterText.toLowerCase();
+            allPeopleCache.forEach(p => {
+                const textToSearch = `${p.SOGGETTO} ${p.Nome} ${p.Tipo}`.toLowerCase();
+                if (textToSearch.includes(search)) {
+                    const opt = document.createElement('option');
+                    opt.value = `${p.ID_Associazione}::${p.Nome}`;
+                    opt.text = `${p.SOGGETTO.toUpperCase()} - ${p.Nome} (${p.Tipo})`;
+                    sel.appendChild(opt);
+                }
+            });
+            if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) sel.value = currentVal;
+            else sel.selectedIndex = 0;
+        }
+
+        // --- Rendering Tabella ---
+        function renderTable(data) {
+            const tbody = document.getElementById('tableBody');
+            if(data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-gray-400 italic">Nessun evento registrato in questa sezione.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = data.map(row => {
+                let dataFmt = row.Data;
+                try {
+                    const d = new Date(row.Data);
+                    if(!isNaN(d)) dataFmt = d.toLocaleDateString('it-IT');
+                } catch(e){}
+
+                const fullODG = row.ODG || '-';
+                const hasVerbale = row.Verbale && row.Verbale.length > 5;
+                const hasDocs = row.Documenti && row.Documenti.length > 5;
+
+                // Logica Tasto Azione: Modifica (Admin) vs Visualizza (User)
+                const actionButton = isAdminUser 
+                    ? `<button class="btn btn-xs btn-ghost text-blue-600 font-bold uppercase group-hover:bg-white">
+                        Modifica <i data-lucide="edit-3" class="w-3 h-3 ml-1"></i>
+                       </button>`
+                    : `<button class="btn btn-xs btn-ghost text-gray-600 font-bold uppercase group-hover:bg-white">
+                        Visualizza <i data-lucide="eye" class="w-3 h-3 ml-1"></i>
+                       </button>`;
+
+                return `
+                <tr class="hover:bg-blue-50 cursor-pointer group transition-colors border-b border-gray-100" onclick="openEdit(${row.ID})">
+                    <td class="font-bold text-gray-600 py-6 px-8 font-mono text-sm align-top">${dataFmt}</td>
+                    <td class="font-black uppercase text-gray-800 text-sm tracking-wide align-top">${row.Evento || 'Senza Titolo'}</td>
+                    <td class="text-gray-600 text-xs align-top whitespace-pre-wrap leading-relaxed max-w-md line-clamp-3">${fullODG}</td>
+                    
+                    <td class="text-center align-top pt-6">
+                        ${hasVerbale 
+                            ? `<span class="badge badge-success badge-sm gap-1 text-white text-[10px] font-bold uppercase cursor-pointer hover:scale-110 transition-transform" 
+                                onclick="event.stopPropagation(); window.open('${row.Verbale}', '_blank')">
+                                <i data-lucide="check" class="w-3"></i> SI
+                               </span>` 
+                            : `<span class="text-gray-300">-</span>`}
+                    </td>
+                    
+                    <td class="text-center align-top pt-6">
+                        ${hasDocs 
+                            ? `<span class="badge badge-info badge-sm gap-1 text-white text-[10px] font-bold uppercase cursor-pointer hover:scale-110 transition-transform" 
+                                onclick="event.stopPropagation(); window.open('${row.Documenti}', '_blank')">
+                                <i data-lucide="folder" class="w-3"></i> SI
+                               </span>` 
+                            : `<span class="text-gray-300">-</span>`}
+                    </td>
+
+                    <td class="text-right px-8 align-top pt-6">
+                        ${actionButton}
+                    </td>
+                </tr>`;
+            }).join('');
+            
+            if(window.lucide) lucide.createIcons();
+        }
+
+        function preparaNuovo() { 
+            // Controllo sicurezza (se utente forza la chiamata)
+            if(!isAdminUser) return;
+
+            document.getElementById('agoraForm').reset(); 
+            document.getElementById('ago-id').value = ''; 
+            document.getElementById('ago-tipo-id').value = currentTypeId;
+            document.getElementById('ago-data').valueAsDate = new Date();
+            
+            setModalReadOnly(false); // Modal modificabile
+
+            document.getElementById('btn-delete').classList.add('hidden');
+            document.getElementById('add-partecipante-area').classList.add('hidden'); // Nascosto in creazione
+            document.getElementById('presentiTableBody').innerHTML = `<tr><td colspan="5" class="text-center italic text-xs py-4">Salva l'evento prima di aggiungere i presenti.</td></tr>`;
+            
+            resetFileUI('verbale');
+            resetFileUI('docs');
+            document.getElementById('filter-people-input').value = "";
+            loadUniqueOptions();
+        }
+
+        async function openEdit(id) {
+            const s = localDataCache.find(x => x.ID == id);
+            if(!s) return;
+            
+            document.getElementById('ago-id').value = s.ID;
+            document.getElementById('ago-tipo-id').value = s.IDTipoEvento; 
+            document.getElementById('ago-data').value = s.Data; 
+            document.getElementById('ago-evento').value = s.Evento;
+            document.getElementById('ago-odg').value = s.ODG || ''; 
+            
+            setupFileUI('verbale', s.Verbale);
+            setupFileUI('docs', s.Documenti);
+
+            // Gestione Permessi nel Modal
+            if(isAdminUser) {
+                setModalReadOnly(false);
+                document.getElementById('add-partecipante-area').classList.remove('hidden');
+                document.getElementById('btn-delete').classList.remove('hidden');
+                document.getElementById('btn-save').classList.remove('hidden');
+            } else {
+                setModalReadOnly(true);
+                document.getElementById('add-partecipante-area').classList.add('hidden');
+                document.getElementById('btn-delete').classList.add('hidden');
+                document.getElementById('btn-save').classList.add('hidden');
+            }
+            
+            loadPresenti(id);
+            
+            document.getElementById('filter-people-input').value = "";
+            loadUniqueOptions();
+            document.getElementById('new-unique-select').value = "";
+
+            document.getElementById('modal-agora').checked = true;
+        }
+
+        // Funzione per attivare/disattivare i campi
+        function setModalReadOnly(isReadOnly) {
+            const inputs = ['ago-data', 'ago-evento', 'ago-odg'];
+            inputs.forEach(id => {
+                document.getElementById(id).disabled = isReadOnly;
+            });
+            
+            // Nascondi input file se readonly
+            const displayStyle = isReadOnly ? 'none' : 'block';
+            document.getElementById('input-container-verbale').style.display = displayStyle;
+            document.getElementById('input-container-docs').style.display = displayStyle;
+
+            // Nascondi tasti rimozione file
+            const delVerbale = document.getElementById('btn-del-verbale');
+            const delDocs = document.getElementById('btn-del-docs');
+            if(delVerbale) delVerbale.style.display = isReadOnly ? 'none' : 'inline-flex';
+            if(delDocs) delDocs.style.display = isReadOnly ? 'none' : 'inline-flex';
+        }
+
+        function setupFileUI(type, path) {
+            const viewDiv = document.getElementById(type === 'verbale' ? 'view-verbale' : 'view-docs');
+            const fileInput = document.getElementById(type === 'verbale' ? 'ago-verbale-file' : 'ago-docs-file');
+            const nameSpan = document.getElementById(type === 'verbale' ? 'name-verbale' : 'name-docs');
+            const linkBtn = document.getElementById(type === 'verbale' ? 'link-verbale' : 'link-docs');
+            const deleteFlag = document.getElementById(type === 'verbale' ? 'delete-verbale-flag' : 'delete-docs-flag');
+
+            deleteFlag.value = "false"; 
+            if (path && path.length > 5) {
+                viewDiv.classList.remove('hidden');
+                // Se admin, nascondiamo input perché c'è già file. Se user, input è nascosto da setModalReadOnly
+                if(isAdminUser) fileInput.classList.add('hidden'); 
+                nameSpan.innerText = path.split('/').pop();
+                linkBtn.href = path;
+            } else {
+                viewDiv.classList.add('hidden');
+                // Se admin mostra input. Se user resta nascosto
+                if(isAdminUser) fileInput.classList.remove('hidden');
+                fileInput.value = ""; 
+            }
+        }
+
+        function rimuoviFile(type) {
+            if(!isAdminUser) return;
+            if(!confirm("Il file verrà rimosso al salvataggio. Procedere?")) return;
+            document.getElementById(type === 'verbale' ? 'view-verbale' : 'view-docs').classList.add('hidden');
+            document.getElementById(type === 'verbale' ? 'ago-verbale-file' : 'ago-docs-file').classList.remove('hidden');
+            document.getElementById(type === 'verbale' ? 'delete-verbale-flag' : 'delete-docs-flag').value = "true";
+        }
+        
+        function resetFileUI(type) {
+             document.getElementById(type === 'verbale' ? 'view-verbale' : 'view-docs').classList.add('hidden');
+             const input = document.getElementById(type === 'verbale' ? 'ago-verbale-file' : 'ago-docs-file');
+             if(isAdminUser) input.classList.remove('hidden');
+             input.value = "";
+             document.getElementById(type === 'verbale' ? 'delete-verbale-flag' : 'delete-docs-flag').value = "false";
+        }
+
+        async function loadPresenti(idRiunione) {
+            const tbody = document.getElementById('presentiTableBody');
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-xs italic">Caricamento...</td></tr>`;
+            try {
+                const res = await fetch(`/api/agora/${idRiunione}/presenti`);
+                const data = await res.json(); 
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-xs text-gray-400">Nessun partecipante registrato.</td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = data.map(row => {
+                    const isTavolo = row.TAVOLO == 1;
+                    const isDirettivo = row.DIRETTIVO_DELEGAZIONE == 1;
+                    
+                    // Tasto Elimina presente solo per Admin
+                    const deleteBtn = isAdminUser 
+                        ? `<button type="button" onclick="handleDeletePresente(${row.IDRiga})" class="btn btn-ghost btn-xs text-red-500 hover:bg-red-50"><i data-lucide="trash-2" class="w-3 h-3"></i></button>`
+                        : ``;
+
+                    return `
+                    <tr class="hover:bg-gray-50 border-b border-gray-100">
+                        <td class="font-bold text-gray-700 uppercase text-[11px]" title="${row.SOGGETTO || ''}">${row.SOGGETTO || 'N/D'}</td>
+                        <td class="text-center">${isTavolo ? '<span class="badge badge-primary badge-xs text-white font-bold">T</span>' : ''}</td>
+                        <td class="text-center">${isDirettivo ? '<span class="badge badge-secondary badge-xs text-white font-bold">D</span>' : ''}</td>
+                        <td class="text-gray-600 text-xs italic">${row.Rappresentante || '-'}</td>
+                        <td class="text-right">
+                             ${deleteBtn}
+                        </td>
+                    </tr>`;
+                }).join('');
+                if(window.lucide) lucide.createIcons();
+            } catch (error) { tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-xs text-red-400">Errore.</td></tr>`; }
+        }
+
+        async function handleAddPresente() {
+            if(!isAdminUser) return;
+
+            const idRiunione = document.getElementById('ago-id').value;
+            const val = document.getElementById('new-unique-select').value; 
+
+            if(!idRiunione) return alert("Errore: Devi prima salvare l'evento.");
+            if(!val) return alert("Attenzione: Seleziona un partecipante dalla lista.");
+
+            const parts = val.split('::');
+            if (parts.length < 2) return alert("Errore nel formato del partecipante selezionato.");
+            
+            const idAss = parts[0];
+            const nome = parts[1];
+
+            try {
+                const res = await fetch('/api/agora/presenti', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        IDRiunioni: idRiunione, 
+                        IDAssociazione: idAss, 
+                        Rappresentante: nome 
+                    })
+                });
+                const result = await res.json();
+                if(res.ok) {
+                    loadPresenti(idRiunione);
+                    document.getElementById('new-unique-select').value = "";
+                    document.getElementById('filter-people-input').value = "";
+                } else {
+                    alert("Errore inserimento: " + (result.error || "Errore sconosciuto"));
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function handleDeletePresente(idRiga) {
+            if(!isAdminUser) return;
+            if(!confirm("Rimuovere partecipante?")) return;
+            try {
+                const res = await fetch(`/api/agora/presenti/${idRiga}`, { method: 'DELETE' });
+                if(res.ok) loadPresenti(document.getElementById('ago-id').value);
+            } catch(e) { console.error(e); }
+        }
+
+        async function handleSave() {
+            if(!isAdminUser) return;
+
+            const id = document.getElementById('ago-id').value;
+            const tipoId = document.getElementById('ago-tipo-id').value; 
+            const dataVal = document.getElementById('ago-data').value;
+            const eventoVal = document.getElementById('ago-evento').value.toUpperCase();
+            
+            if(!dataVal || !eventoVal || !tipoId) return alert("Compilare Data, Evento e assicurarsi che un Registro sia selezionato.");
+            
+            const formData = new FormData();
+            formData.append('Data', dataVal);
+            formData.append('Evento', eventoVal);
+            formData.append('IDTipoEvento', tipoId); 
+            formData.append('ODG', document.getElementById('ago-odg').value);
+            
+            const fileVerbale = document.getElementById('ago-verbale-file').files[0];
+            const fileDocs = document.getElementById('ago-docs-file').files[0];
+            if(fileVerbale) formData.append('verbale', fileVerbale);
+            if(fileDocs) formData.append('documenti', fileDocs);
+
+            formData.append('deleteVerbale', document.getElementById('delete-verbale-flag').value);
+            formData.append('deleteDocumenti', document.getElementById('delete-docs-flag').value);
+
+            if(!confirm("Salvare i dati?")) return;
+
+            const url = id ? `/api/agora/${id}` : '/api/agora';
+            const method = id ? 'PUT' : 'POST';
+
+            try {
+                const res = await fetch(url, { method: method, body: formData });
+                if(res.ok) { 
+                    const result = await res.json();
+                    if(!id && result.id) {
+                         alert("Evento creato. Aggiungi i partecipanti.");
+                         document.getElementById('modal-agora').checked = false;
+                         await loadEvents(currentTypeId);
+                         setTimeout(() => openEdit(result.id), 500);
+                    } else {
+                        document.getElementById('modal-agora').checked = false; 
+                        loadEvents(currentTypeId); 
+                    }
+                } else alert("Errore salvataggio: " + res.statusText);
+            } catch(e) { console.error(e); }
+        }
+
+        async function handleDelete() {
+            if(!isAdminUser) return;
+            if(!confirm("Eliminare definitivamente l'evento?")) return;
+            try {
+                const res = await fetch(`/api/agora/${document.getElementById('ago-id').value}`, { method: 'DELETE' });
+                if(res.ok) { document.getElementById('modal-agora').checked = false; loadEvents(currentTypeId); }
+            } catch(e) { console.error(e); }
+        }
+
+        function filterTable() {
+            const q = document.getElementById("searchInput").value.toUpperCase();
+            const rows = document.getElementById("tableBody").getElementsByTagName("tr");
+            for (let r of rows) {
+                if(r.getElementsByTagName('td').length > 1) {
+                    r.style.display = r.innerText.toUpperCase().includes(q) ? "" : "none";
+                }
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestione Tipologie Eventi</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-base-200 min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <div class="navbar bg-white shadow-md z-10 px-4">
+        <div class="flex-1">
+            <a href="/dashboard_servizi" class="btn btn-ghost normal-case text-xl text-emerald-700">⬅ Torna ai Servizi</a>
+        </div>
+        <div class="flex-none">
+            <h1 class="text-xl font-bold uppercase text-base-content mr-4">Gestione Tipologie Eventi</h1>
+        </div>
+    </div>
+
+    <!-- Contenuto -->
+    <div class="container mx-auto p-6 max-w-4xl flex-grow">
+        
+        <!-- Box Informativo -->
+        <div class="alert alert-info shadow-lg mb-6">
+            <i class="fa-solid fa-circle-info text-2xl"></i>
+            <div>
+                <h3 class="font-bold">Informazione Importante</h3>
+                <div class="text-xs">
+                    Non è possibile eliminare una Tipologia se essa è attualmente utilizzata in uno o più eventi registrati in archivio.<br>
+                    Questa misura di sicurezza preserva l'integrità dei dati storici.
+                </div>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="card-title text-2xl">Elenco Tipologie</h2>
+                    <button onclick="openModal()" class="btn btn-primary btn-sm">
+                        <i class="fa-solid fa-plus"></i> Nuova Tipologia
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr class="bg-base-200">
+                                <th class="w-16">ID</th>
+                                <th>Intestazione / Descrizione</th>
+                                <th class="w-32 text-center">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <!-- Righe generate da JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="loading" class="text-center py-4 hidden"><span class="loading loading-spinner loading-lg"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale Inserimento/Modifica -->
+    <dialog id="modalTipo" class="modal">
+        <form method="dialog" class="modal-box">
+            <h3 class="font-bold text-lg mb-4" id="modalTitle">Nuova Tipologia</h3>
+            
+            <input type="hidden" id="inputId">
+            
+            <div class="form-control w-full">
+                <label class="label"><span class="label-text">Intestazione Pagina (Titolo Evento)</span></label>
+                <input type="text" id="inputDescrizione" placeholder="Es: REGISTRO DIRETTIVO" class="input input-bordered w-full uppercase" required />
+            </div>
+
+            <div class="modal-action">
+                <button type="button" class="btn" onclick="document.getElementById('modalTipo').close()">Annulla</button>
+                <button type="button" class="btn btn-primary" onclick="saveTipo()">Salva</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Toast Notification -->
+    <div class="toast toast-end z-50">
+        <div id="toast" class="alert hidden shadow-lg">
+            <span id="toastMsg">Message</span>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api/agora-tipi';
+
+        // Caricamento Iniziale
+        document.addEventListener('DOMContentLoaded', loadData);
+
+        function loadData() {
+            document.getElementById('loading').classList.remove('hidden');
+            fetch(API_URL)
+                .then(res => res.json())
+                .then(data => {
+                    renderTable(data);
+                    document.getElementById('loading').classList.add('hidden');
+                })
+                .catch(err => console.error("Errore caricamento:", err));
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="text-center text-gray-500 py-4">Nessuna tipologia trovata.</td></tr>`;
+                return;
+            }
+
+            data.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="font-mono text-xs opacity-50">${item.ID}</td>
+                    <td class="font-bold text-lg">${item.IntestazionePagina}</td>
+                    <td class="text-center">
+                        <div class="join">
+                            <button onclick="editTipo(${item.ID}, '${item.IntestazionePagina.replace(/'/g, "\\'")}')" class="btn btn-sm btn-warning join-item"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteTipo(${item.ID})" class="btn btn-sm btn-error join-item"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Gestione Modale
+        function openModal() {
+            document.getElementById('modalTitle').innerText = "Nuova Tipologia";
+            document.getElementById('inputId').value = "";
+            document.getElementById('inputDescrizione').value = "";
+            document.getElementById('modalTipo').showModal();
+        }
+
+        function editTipo(id, desc) {
+            document.getElementById('modalTitle').innerText = "Modifica Tipologia";
+            document.getElementById('inputId').value = id;
+            document.getElementById('inputDescrizione').value = desc;
+            document.getElementById('modalTipo').showModal();
+        }
+
+        // Salvataggio (Create/Update)
+        function saveTipo() {
+            const id = document.getElementById('inputId').value;
+            const desc = document.getElementById('inputDescrizione').value.trim().toUpperCase();
+
+            if (!desc) {
+                showToast("Inserire una descrizione valida.", "error");
+                return;
+            }
+
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `${API_URL}/${id}` : API_URL;
+
+            fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ IntestazionePagina: desc })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('modalTipo').close();
+                    loadData();
+                    showToast("Salvataggio completato!", "success");
+                } else {
+                    showToast("Errore: " + (data.error || "Sconosciuto"), "error");
+                }
+            })
+            .catch(err => showToast("Errore di rete.", "error"));
+        }
+
+        // Eliminazione
+        function deleteTipo(id) {
+            if (!confirm("Sei sicuro di voler eliminare questa tipologia?")) return;
+
+            fetch(`${API_URL}/${id}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    loadData();
+                    showToast("Eliminato correttamente.", "success");
+                } else {
+                    // Gestione errore constraint (FK)
+                    alert("IMPOSSIBILE ELIMINARE:\n" + (data.error || "Errore sconosciuto."));
+                }
+            })
+            .catch(err => showToast("Errore di rete.", "error"));
+        }
+
+        // Utility Toast
+        function showToast(msg, type) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            toast.className = `alert shadow-lg ${type === 'success' ? 'alert-success' : 'alert-error'}`;
+            toastMsg.innerText = msg;
+            toast.parentElement.classList.remove('hidden'); // toast wrapper
+            
+            setTimeout(() => {
+                toast.parentElement.classList.add('hidden');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+database.db
+database.db.LOCKED
+session.lock
+archivio_files/
+backups_db/
+.DS_Store

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Servizi di Sistema</title>
+    <!-- Librerie Stile -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-base-200 min-h-screen relative flex flex-col">
+
+    <!-- Navbar -->
+    <div class="navbar bg-white shadow-md z-10 px-4">
+        <div class="flex-1">
+            <a href="/" class="btn btn-ghost normal-case text-xl text-emerald-700">⬅ Menu Principale</a>
+        </div>
+        <div class="flex-none">
+            <h1 class="text-xl font-bold uppercase text-base-content mr-4">Servizi di Sistema</h1>
+        </div>
+    </div>
+
+    <!-- Container -->
+    <div class="container mx-auto p-6 max-w-6xl flex-grow">
+        
+        <!-- Griglia Servizi -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            
+            <!-- CARD 1: BACKUP DATI -->
+            <div class="card bg-white shadow-xl hover:-translate-y-1 transition-all duration-300 border-t-8 border-orange-500">
+                <div class="card-body items-center text-center">
+                    <div class="text-5xl mb-2">💾</div>
+                    <h2 class="card-title text-2xl font-black uppercase text-orange-600 mb-4">Backup & Export</h2>
+                    <p class="text-sm text-gray-500 mb-6">Backup nativo del database o esportazione dati in Excel.</p>
+                    <div class="flex flex-col gap-3 w-full max-w-xs mt-auto">
+                        <a href="/api/backup/db" class="btn bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200 w-full font-bold">📥 Backup SQLite (Nativo)</a>
+                        <a href="/api/backup/excel" class="btn bg-green-100 text-green-700 border-green-200 hover:bg-green-200 w-full font-bold">📊 Export Excel</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CARD 2: REPORTISTICA -->
+            <div class="card bg-white shadow-xl hover:-translate-y-1 transition-all duration-300 border-t-8 border-cyan-500">
+                <div class="card-body items-center text-center">
+                    <div class="text-5xl mb-2">📊</div>
+                    <h2 class="card-title text-2xl font-black uppercase text-cyan-600 mb-4">Reportistica Agorà</h2>
+                    <p class="text-sm text-gray-500 mb-6">Generazione stampe e archivi completi.</p>
+                    <div class="flex flex-col gap-3 w-full max-w-xs mt-auto">
+                        <a href="/api/report/agora-pdf" target="_blank" class="btn bg-red-100 text-red-700 border-red-200 hover:bg-red-200 w-full font-bold">
+                            📄 PDF "Tavolo Agorà"
+                        </a>
+                        <a href="/api/report/agora-zip" target="_blank" class="btn bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200 w-full font-bold">
+                            📦 ZIP Completo (File + PDF)
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CARD 3: IMPORTAZIONE RUNTS -->
+            <div class="card bg-white shadow-xl hover:-translate-y-1 transition-all duration-300 border-t-8 border-blue-500">
+                <div class="card-body items-center text-center">
+                    <div class="text-5xl mb-2">📥</div>
+                    <h2 class="card-title text-2xl font-black uppercase text-blue-600 mb-2">Importazione RUNTS</h2>
+                    <div class="alert alert-warning text-xs mb-4 text-left shadow-sm">
+                        <span>File CSV (UTF-8). Separatore: virgola o punto e virgola.</span>
+                    </div>
+                    <form id="formRunts" class="w-full max-w-xs mt-auto">
+                        <div class="form-control w-full mb-4">
+                            <input type="file" id="fileRuntsInput" name="fileRunts" accept=".csv" class="file-input file-input-bordered file-input-primary w-full" required />
+                        </div>
+                        <div id="loadingMessage" class="hidden alert alert-info shadow-lg mb-4 text-sm flex justify-center items-center">
+                            <span class="loading loading-spinner loading-md"></span><span class="font-bold ml-2">Elaborazione...</span>
+                        </div>
+                        <button type="submit" id="btnSubmit" class="btn btn-primary w-full font-bold" disabled>🚀 Avvia Importazione</button>
+                    </form>
+                    <div id="resultMessage" class="mt-4 text-sm font-bold hidden"></div>
+                </div>
+            </div>
+
+            <!-- CARD 4: MAILING LIST -->
+            <div class="card bg-white shadow-xl hover:-translate-y-1 transition-all duration-300 border-t-8 border-teal-500">
+                <div class="card-body items-center text-center">
+                    <div class="text-5xl mb-2">📧</div>
+                    <h2 class="card-title text-2xl font-black uppercase text-teal-600 mb-4">Mailing List</h2>
+                    <p class="text-sm text-gray-500 mb-6">Gestione delle liste di distribuzione e gruppi.</p>
+                    <a href="gestione_mailinglist.html" class="btn bg-teal-100 text-teal-700 border-teal-200 hover:bg-teal-200 w-full font-bold mt-auto">📋 Gestisci Liste</a>
+                </div>
+            </div>
+
+            <!-- CARD 5: GESTIONE TIPI EVENTO -->
+            <div class="card bg-white shadow-xl hover:-translate-y-1 transition-all duration-300 border-t-8 border-purple-500">
+                <div class="card-body items-center text-center">
+                    <div class="text-5xl mb-2">🏷️</div>
+                    <h2 class="card-title text-2xl font-black uppercase text-purple-600 mb-4">Tipologia Eventi</h2>
+                    <p class="text-sm text-gray-500 mb-6">Categorie per il registro verbali Agorà.</p>
+                    <a href="/agora_tipo_eventi" class="btn bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200 w-full font-bold mt-auto">🏷️ Gestisci Tipologie</a>
+                </div>
+            </div>
+
+            <!-- CARD 6: GESTIONE UTENTI -->
+            <div class="card bg-white shadow-xl hover:-translate-y-1 transition-all duration-300 border-t-8 border-red-500">
+                <div class="card-body items-center text-center">
+                    <div class="text-5xl mb-2">👥</div>
+                    <h2 class="card-title text-2xl font-black uppercase text-red-600 mb-4">Gestione Utenti</h2>
+                    <p class="text-sm text-gray-500 mb-6">Aggiungi, modifica e gestisci gli accessi.</p>
+                    <a href="/gestione_utenti" class="btn bg-red-100 text-red-700 border-red-200 hover:bg-red-200 w-full font-bold mt-auto">
+                        🛠️ Gestisci Utenti
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Script Gestione Import (Invariato) -->
+    <script>
+        const fileInput = document.getElementById('fileRuntsInput');
+        const btnSubmit = document.getElementById('btnSubmit');
+        fileInput.addEventListener('change', function() { if (this.files && this.files.length > 0) btnSubmit.disabled = false; else btnSubmit.disabled = true; });
+        document.getElementById('formRunts').addEventListener('submit', function(e) {
+            e.preventDefault();
+            if(fileInput.files.length === 0) return;
+            const formData = new FormData();
+            formData.append('fileRunts', fileInput.files[0]);
+            const loadingDiv = document.getElementById('loadingMessage');
+            const resultMsg = document.getElementById('resultMessage');
+            loadingDiv.classList.remove('hidden');
+            resultMsg.classList.add('hidden');
+            btnSubmit.disabled = true;
+            fetch('/api/import/runts', { method: 'POST', body: formData })
+            .then(response => response.json())
+            .then(data => {
+                loadingDiv.classList.add('hidden');
+                fileInput.value = ''; 
+                resultMsg.classList.remove('hidden');
+                if (data.success) { resultMsg.textContent = "✅ " + data.message; resultMsg.classList.add('text-green-600'); } 
+                else { throw new Error(data.error || "Errore sconosciuto"); }
+            })
+            .catch(err => {
+                loadingDiv.classList.add('hidden');
+                fileInput.value = ''; 
+                resultMsg.classList.remove('hidden');
+                resultMsg.textContent = "❌ Errore: " + err.message;
+                resultMsg.classList.add('text-red-600');
+            });
+        });
+    </script>
+</body>
+</html>
