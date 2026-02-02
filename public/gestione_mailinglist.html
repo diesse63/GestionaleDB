@@ -9,6 +9,8 @@
     <style>
         .row-selected { background-color: #d1fae5 !important; } /* green-100 */
         .cursor-pointer { cursor: pointer; }
+        /* Altezza fissa per le tabelle scrollabili */
+        .table-scroll-area { height: 350px; overflow-y: auto; }
     </style>
 </head>
 <body class="bg-base-200 min-h-screen">
@@ -90,62 +92,35 @@
                     </div>
                 </div>
 
-                <!-- SEZIONE RICERCA CON TAB -->
+                <!-- SEZIONE RICERCA UNIFICATA -->
                 <div class="card bg-base-100 shadow-xl">
                     <div class="card-body p-4">
-                        <div class="tabs tabs-boxed bg-gray-100 mb-4">
-                            <a class="tab tab-active" onclick="switchTab(1)" id="tab-1">Associazioni</a> 
-                            <a class="tab" onclick="switchTab(2)" id="tab-2">Referenti</a> 
-                            <a class="tab" onclick="switchTab(3)" id="tab-3">Altri Soggetti</a>
+                        <h3 class="font-bold text-gray-700 mb-2">Ricerca Destinatari</h3>
+                        
+                        <div class="flex gap-2 mb-2 items-center">
+                            <input type="text" id="searchInput" class="input input-bordered input-sm w-full" placeholder="Cerca per Associazione, Nome Persona o Email (min 3 caratteri)..." />
+                            <button onclick="cercaUnificata()" class="btn btn-sm btn-primary px-6"><i class="fa-solid fa-search"></i> Cerca</button>
+                        </div>
+                        
+                        <div class="text-xs text-gray-500 mb-2 italic flex justify-between">
+                            <span>Doppio click sulla riga per aggiungere/rimuovere.</span>
+                            <span>Risultati trovati: <span id="resCount" class="font-bold">0</span></span>
                         </div>
 
-                        <!-- TAB 1: ASSOCIAZIONI -->
-                        <div id="content-tab-1" class="tab-content block">
-                            <div class="flex gap-2 mb-2 items-center">
-                                <select id="filterTipologia" class="select select-bordered select-sm w-1/4">
-                                    <option value="">Tutte le Tipologie</option>
-                                    <!-- Popolato JS -->
-                                </select>
-                                <input type="text" id="searchAssocInput" class="input input-bordered input-sm w-full" placeholder="Cerca Associazione, Referente, Altri (min 3 caratteri)..." />
-                                <button onclick="cerca('associazioni')" class="btn btn-sm btn-primary"><i class="fa-solid fa-search"></i></button>
-                            </div>
-                            <div class="text-xs text-gray-500 mb-2 italic">Doppio click sulla riga per aggiungere/rimuovere. Seleziona A/CC/CCN per confermare.</div>
-                            <div class="overflow-x-auto max-h-60 border rounded">
-                                <table class="table table-xs table-pin-rows">
-                                    <thead><tr><th>Associazione</th><th>Mail</th><th>Info</th><th>Azioni</th></tr></thead>
-                                    <tbody id="res-associazioni"></tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- TAB 2: REFERENTI -->
-                        <div id="content-tab-2" class="tab-content hidden">
-                            <div class="flex gap-2 mb-2">
-                                <input type="text" id="searchReferentiInput" class="input input-bordered input-sm w-full" placeholder="Cerca Nome Referente o Associazione (min 3 caratteri)..." />
-                                <button onclick="cerca('referenti')" class="btn btn-sm btn-primary"><i class="fa-solid fa-search"></i></button>
-                            </div>
-                            <div class="text-xs text-gray-500 mb-2 italic">Visualizzati solo Referenti con mail valida.</div>
-                            <div class="overflow-x-auto max-h-60 border rounded">
-                                <table class="table table-xs table-pin-rows">
-                                    <thead><tr><th>Nominativo</th><th>Associazione</th><th>Mail</th><th>Azioni</th></tr></thead>
-                                    <tbody id="res-referenti"></tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- TAB 3: ALTRI SOGGETTI -->
-                        <div id="content-tab-3" class="tab-content hidden">
-                            <div class="flex gap-2 mb-2">
-                                <input type="text" id="searchAltriInput" class="input input-bordered input-sm w-full" placeholder="Cerca Nome o Associazione (min 3 caratteri)..." />
-                                <button onclick="cerca('altrisoggetti')" class="btn btn-sm btn-primary"><i class="fa-solid fa-search"></i></button>
-                            </div>
-                            <div class="text-xs text-gray-500 mb-2 italic">Visualizzati solo Altri Soggetti con mail valida.</div>
-                            <div class="overflow-x-auto max-h-60 border rounded">
-                                <table class="table table-xs table-pin-rows">
-                                    <thead><tr><th>Nominativo</th><th>Associazione</th><th>Mail</th><th>Azioni</th></tr></thead>
-                                    <tbody id="res-altrisoggetti"></tbody>
-                                </table>
-                            </div>
+                        <div class="overflow-x-auto border rounded table-scroll-area">
+                            <table class="table table-xs table-pin-rows">
+                                <thead class="bg-base-200">
+                                    <tr>
+                                        <th class="w-1/3">Associazione</th>
+                                        <th class="w-1/3">Indirizzo Email</th>
+                                        <th class="w-1/4">Appartiene a</th> <!-- NUOVA COLONNA -->
+                                        <th class="text-right w-20">Azioni</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="res-ricerca">
+                                    <tr><td colspan="4" class="text-center text-gray-400 py-4">Effettua una ricerca per iniziare</td></tr>
+                                </tbody>
+                            </table>
                         </div>
 
                     </div>
@@ -208,17 +183,14 @@
     <!-- Script Logica -->
     <script>
         let selectedListId = null;
-        let currentMembers = []; // Cache membri attuali
-        let currentMembersMap = new Map(); // Mappa per lookup veloce: Email -> {IDRiga, Tipo}
+        let currentMembers = []; 
+        let currentMembersMap = new Map(); 
 
         document.addEventListener('DOMContentLoaded', () => {
             caricaListe();
-            caricaTipologie();
             
-            // Enter key listeners
-            document.getElementById('searchAssocInput').addEventListener('keyup', e => { if(e.key==='Enter') cerca('associazioni'); });
-            document.getElementById('searchReferentiInput').addEventListener('keyup', e => { if(e.key==='Enter') cerca('referenti'); });
-            document.getElementById('searchAltriInput').addEventListener('keyup', e => { if(e.key==='Enter') cerca('altrisoggetti'); });
+            // Enter key listener
+            document.getElementById('searchInput').addEventListener('keyup', e => { if(e.key==='Enter') cercaUnificata(); });
 
             document.getElementById('formCreaLista').addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -238,32 +210,6 @@
                 } catch(err) { console.error(err); }
             });
         });
-
-        // --- GESTIONE TABS ---
-        function switchTab(num) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
-            document.getElementById(`tab-${num}`).classList.add('tab-active');
-            
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('block'));
-            
-            document.getElementById(`content-tab-${num}`).classList.remove('hidden');
-            document.getElementById(`content-tab-${num}`).classList.add('block');
-        }
-
-        async function caricaTipologie() {
-            try {
-                const res = await fetch('/api/tipologie');
-                const rows = await res.json();
-                const sel = document.getElementById('filterTipologia');
-                rows.forEach(t => {
-                    const opt = document.createElement('option');
-                    opt.value = t.ID;
-                    opt.textContent = t.Tipologia;
-                    sel.appendChild(opt);
-                });
-            } catch(e) { console.error(e); }
-        }
 
         async function caricaListe() {
             try {
@@ -287,10 +233,13 @@
             document.getElementById('noSelection').classList.add('hidden');
             document.getElementById('gestioneListaContainer').classList.remove('hidden');
             
-            // Reset Risultati Ricerca
-            document.getElementById('res-associazioni').innerHTML = '';
-            document.getElementById('res-referenti').innerHTML = '';
-            document.getElementById('res-altrisoggetti').innerHTML = '';
+            // Reset Risultati Ricerca ma mantieni input se c'è
+            if(document.getElementById('searchInput').value.length >= 3) {
+                cercaUnificata();
+            } else {
+                document.getElementById('res-ricerca').innerHTML = '<tr><td colspan="4" class="text-center text-gray-400 py-4">Effettua una ricerca per iniziare</td></tr>';
+                document.getElementById('resCount').textContent = '0';
+            }
 
             caricaMembriLista();
             caricaListe(); 
@@ -302,7 +251,6 @@
                 const res = await fetch(`/api/maillist/${selectedListId}/members`);
                 currentMembers = await res.json();
                 
-                // Mappa per lookup rapido: Key=EmailLower, Value={IDRiga, TipoInvio}
                 currentMembersMap.clear();
                 currentMembers.forEach(m => {
                     currentMembersMap.set(m.Indirizzo.toLowerCase(), { id: m.ID, tipo: m.TipoInvio });
@@ -311,11 +259,12 @@
                 document.getElementById('countMembri').textContent = currentMembers.length;
                 renderTabellaMembri();
                 
-                // Ricarica la ricerca attuale per aggiornare gli stati evidenziati
-                const activeTab = document.querySelector('.tab-active').id.split('-')[1];
-                if(activeTab == 1 && document.getElementById('res-associazioni').hasChildNodes()) cerca('associazioni');
-                if(activeTab == 2 && document.getElementById('res-referenti').hasChildNodes()) cerca('referenti');
-                if(activeTab == 3 && document.getElementById('res-altrisoggetti').hasChildNodes()) cerca('altrisoggetti');
+                // Aggiorna stato tabella ricerca se popolata
+                const searchResContainer = document.getElementById('res-ricerca');
+                if(searchResContainer.children.length > 0 && !searchResContainer.textContent.includes('Effettua una ricerca')) {
+                    // Rieseguiamo il rendering delle righe correnti per aggiornare i colori
+                    reRenderRicerca();
+                }
 
             } catch(e) { console.error(e); }
         }
@@ -351,112 +300,94 @@
             });
         }
 
-        async function cerca(tipo) {
-            let url = '';
-            let q = '';
-            let resContainer = null;
-            
-            if (tipo === 'associazioni') {
-                q = document.getElementById('searchAssocInput').value;
-                const tip = document.getElementById('filterTipologia').value;
-                if (q.length < 3 && !tip) { alert("Inserisci almeno 3 caratteri o filtra per tipologia"); return; }
-                url = `/api/maillist/search/associazioni?q=${encodeURIComponent(q)}&tipo=${tip}`;
-                resContainer = document.getElementById('res-associazioni');
-            } 
-            else if (tipo === 'referenti') {
-                q = document.getElementById('searchReferentiInput').value;
-                if (q.length < 3) { alert("Inserisci almeno 3 caratteri"); return; }
-                url = `/api/maillist/search/referenti?q=${encodeURIComponent(q)}`;
-                resContainer = document.getElementById('res-referenti');
-            }
-            else if (tipo === 'altrisoggetti') {
-                q = document.getElementById('searchAltriInput').value;
-                if (q.length < 3) { alert("Inserisci almeno 3 caratteri"); return; }
-                url = `/api/maillist/search/altrisoggetti?q=${encodeURIComponent(q)}`;
-                resContainer = document.getElementById('res-altrisoggetti');
-            }
+        // --- NUOVA LOGICA DI RICERCA UNIFICATA ---
+        let lastSearchResults = []; // Cache ultimi risultati
 
+        async function cercaUnificata() {
+            const q = document.getElementById('searchInput').value;
+            if (q.length < 3) { alert("Inserisci almeno 3 caratteri"); return; }
+            
             try {
-                const res = await fetch(url);
+                const res = await fetch(`/api/maillist/search/unified?q=${encodeURIComponent(q)}`);
                 const data = await res.json();
-                renderRisultati(tipo, data, resContainer);
+                lastSearchResults = data;
+                renderRisultatiUnificati(data);
             } catch(e) { console.error(e); }
         }
 
-        function renderRisultati(tipo, rows, container) {
+        function reRenderRicerca() {
+            if(lastSearchResults.length > 0) renderRisultatiUnificati(lastSearchResults);
+        }
+
+        function renderRisultatiUnificati(rows) {
+            const container = document.getElementById('res-ricerca');
+            document.getElementById('resCount').textContent = rows.length;
             container.innerHTML = '';
+            
             if (rows.length === 0) {
-                container.innerHTML = '<tr><td colspan="4" class="text-center text-gray-400">Nessun risultato</td></tr>';
+                container.innerHTML = '<tr><td colspan="4" class="text-center text-gray-400 py-4">Nessun risultato trovato</td></tr>';
                 return;
             }
 
             rows.forEach(row => {
                 const tr = document.createElement('tr');
-                tr.className = "hover cursor-pointer select-none"; // Enable double click visual cue
+                tr.className = "hover cursor-pointer select-none transition-colors duration-150"; 
                 
-                // Estrai dati comuni
-                let email = row.Email || row.Indirizzo;
-                let assocName = row.SOGGETTO || '';
-                let name = row.Nominativo || ''; // Per referenti/altri
-                let idMail = row.IDMail || null; // Solo per associazioni
-                let idAssoc = row.IDAssoc; 
-                let isPredef = row.Predefinito === 1;
+                // Dati
+                const email = row.Indirizzo;
+                const assocName = row.SOGGETTO || 'Sconosciuto';
+                const fonte = row.Fonte; // "Associazione", "Referente: Nome", "Altro: Nome"
+                const idMail = row.IDMail; // Può essere null se Referente/Altro
+                const idAssoc = row.IDAssociazione;
+                const isPredef = row.Predefinito === 1;
 
-                // Controlla se già presente
+                // Check esistenza in lista
                 const existing = currentMembersMap.get(email.toLowerCase());
                 
+                // HTML Colonne
+                let emailHtml = `<span class="font-mono text-xs">${email}</span>`;
+                if(isPredef) emailHtml += `<span class="badge badge-xs badge-success ml-2">Predef</span>`;
+
+                // Colonna Fonte con icona diversa
+                let iconFonte = '<i class="fa-solid fa-building text-gray-400 mr-1"></i>';
+                if(fonte.startsWith('Ref')) iconFonte = '<i class="fa-solid fa-user-tie text-blue-400 mr-1"></i>';
+                if(fonte.startsWith('Altro')) iconFonte = '<i class="fa-solid fa-user text-orange-400 mr-1"></i>';
+
+                let fonteHtml = `<div class="text-xs text-gray-600 flex items-center">${iconFonte} ${fonte}</div>`;
+
+                // Azioni
+                let actions = '';
                 if (existing) {
                     tr.classList.add("row-selected");
-                    // Se esiste, mostra pulsante Rimuovi e Badge Tipo
-                    tr.innerHTML = getRowHTML(tipo, name, assocName, email, isPredef, true, existing.tipo, existing.id);
+                    actions = `
+                        <span class="badge badge-sm badge-neutral mr-2">${existing.tipo}</span>
+                        <button class="btn btn-xs btn-circle btn-ghost text-error" onclick="rimuoviMembro(${existing.id})"><i class="fa-solid fa-times"></i></button>
+                    `;
                     tr.ondblclick = () => rimuoviMembro(existing.id);
                 } else {
-                    // Se non esiste, mostra pulsanti aggiungi
-                    tr.innerHTML = getRowHTML(tipo, name, assocName, email, isPredef, false, null, null);
-                    // Passiamo i dati grezzi per l'aggiunta
+                    actions = `<span class="text-[10px] text-gray-400">Doppio click</span>`;
                     tr.ondblclick = () => toggleSelectionDisplay(tr, idMail, email, idAssoc);
                 }
+
+                tr.innerHTML = `
+                    <td><div class="font-bold text-xs truncate max-w-[200px]" title="${assocName}">${assocName}</div></td>
+                    <td>${emailHtml}</td>
+                    <td>${fonteHtml}</td>
+                    <td class="text-right action-cell">${actions}</td>
+                `;
                 
                 container.appendChild(tr);
             });
         }
 
-        // Helper per HTML riga
-        function getRowHTML(tabType, name, assoc, email, isPredef, exists, tipoInvio, idRigaLista) {
-            let col1 = tabType === 'associazioni' ? assoc : name;
-            let col2 = tabType === 'associazioni' ? '' : assoc; // Colonna 2 vuota per associazioni, nome assoc per altri
-            let predefBadge = isPredef ? '<span class="badge badge-xs badge-success ml-2">Predef</span>' : '';
-            
-            // HTML Azioni
-            let actions = '';
-            if (exists) {
-                actions = `
-                    <span class="badge badge-sm badge-neutral mr-2">${tipoInvio}</span>
-                    <button class="btn btn-xs btn-circle btn-ghost text-error" onclick="rimuoviMembro(${idRigaLista})"><i class="fa-solid fa-times"></i></button>
-                `;
-            } else {
-                // Placeholder per pulsanti che appaiono al click/hover (o click su riga)
-                // Usiamo un container con ID unico per iniettare i bottoni
-                actions = `<span class="text-[10px] text-gray-400">Doppio click</span>`;
-            }
-
-            if (tabType === 'associazioni') {
-                return `<td>${col1}</td><td>${email} ${predefBadge}</td><td class="text-xs text-gray-400">Assoc.</td><td class="text-right action-cell">${actions}</td>`;
-            } else {
-                return `<td>${col1}</td><td>${col2}</td><td>${email}</td><td class="text-right action-cell">${actions}</td>`;
-            }
-        }
-
-        // Gestisce la visualizzazione dei bottoni A/CC/CCN quando si clicca su una riga non selezionata
+        // Mostra i pulsanti A/CC/CCN nella cella azioni
         function toggleSelectionDisplay(tr, idMail, email, idAssoc) {
             const cell = tr.querySelector('.action-cell');
-            // Se stiamo già mostrando i bottoni, annulla
             if (cell.querySelector('.btn-join')) {
                 cell.innerHTML = `<span class="text-[10px] text-gray-400">Doppio click</span>`;
                 return;
             }
             
-            // Crea bottoni
             const div = document.createElement('div');
             div.className = "join btn-join";
             div.innerHTML = `
@@ -469,9 +400,11 @@
         }
 
         async function aggiungiMembro(idMail, email, idAssoc, tipo) {
-            // idMail potrebbe essere 'null' stringa se viene da referenti
+            // idMail potrebbe arrivare come stringa 'null' dal template HTML
+            const realIdMail = (idMail && idMail !== 'null') ? idMail : null;
+            
             const payload = {
-                IDMail: (idMail && idMail !== 'null') ? idMail : null,
+                IDMail: realIdMail,
                 EmailRaw: email,
                 IDAssociazione: idAssoc,
                 TipoInvio: tipo
@@ -485,7 +418,7 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    caricaMembriLista(); // Ricarica tutto e aggiorna anche le ricerche
+                    caricaMembriLista(); // Ricarica e aggiorna la UI
                 } else {
                     alert("Errore inserimento: " + data.error);
                 }
@@ -523,10 +456,9 @@
             } catch(e) { console.error(e); }
         }
 
-        // --- EXPORT ---
+        // --- EXPORT & EML (Invariati nella logica, ma inclusi per completezza) ---
         function esportaLista(modo) {
             if(!currentMembers.length) { alert("Lista vuota"); return; }
-            
             if (modo === 'clipboard') {
                 const map = { 'A': [], 'CC': [], 'CCN': [] };
                 currentMembers.forEach(m => {
@@ -538,8 +470,7 @@
                 if(map.CC.length) txt += "CC: " + map.CC.join('; ') + "\n";
                 if(map.CCN.length) txt += "CCN: " + map.CCN.join('; ');
                 navigator.clipboard.writeText(txt).then(() => alert("Copiato!"));
-            } 
-            else if (modo === 'csv') {
+            } else if (modo === 'csv') {
                 let csv = "Nome,Email,Tipo\n" + currentMembers.map(m => `"${m.SOGGETTO.replace(/"/g,'""')}","${m.Indirizzo}","${m.TipoInvio||'CCN'}"`).join('\n');
                 const a = document.createElement('a');
                 a.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
@@ -548,7 +479,6 @@
             }
         }
 
-        // --- EML LOGIC ---
         function apriModalEML() {
             if(!currentMembers.length) { alert("Lista vuota"); return; }
             document.getElementById('modal_eml').showModal();
@@ -557,8 +487,6 @@
         function generaEMLDownload() {
             const subject = document.getElementById('emlSubject').value || "Oggetto Mail";
             const body = document.getElementById('emlBody').value || "";
-            
-            // Raggruppa destinatari
             const map = { 'To': [], 'Cc': [], 'Bcc': [] };
             currentMembers.forEach(m => {
                 const dest = `"${m.SOGGETTO.replace(/"/g, '')}" <${m.Indirizzo}>`;
@@ -566,20 +494,11 @@
                 else if(m.TipoInvio === 'CC') map.Cc.push(dest);
                 else map.Bcc.push(dest);
             });
-
-            // Se A è vuoto, usa placeholder per evitare spam filter issues
             const toHeader = map.To.length > 0 ? map.To.join(', ') : "undisclosed-recipients:;";
-
-            // Costruzione EML
-            let emlContent = `MIME-Version: 1.0\n`;
-            emlContent += `X-Unsent: 1\n`; // Tratta come bozza
-            emlContent += `Subject: ${subject}\n`;
-            emlContent += `To: ${toHeader}\n`;
+            let emlContent = `MIME-Version: 1.0\nX-Unsent: 1\nSubject: ${subject}\nTo: ${toHeader}\n`;
             if (map.Cc.length) emlContent += `Cc: ${map.Cc.join(', ')}\n`;
             if (map.Bcc.length) emlContent += `Bcc: ${map.Bcc.join(', ')}\n`;
-            emlContent += `Content-Type: text/plain; charset=UTF-8\n\n`;
-            emlContent += body;
-
+            emlContent += `Content-Type: text/plain; charset=UTF-8\n\n${body}`;
             const blob = new Blob([emlContent], { type: 'message/rfc822' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');

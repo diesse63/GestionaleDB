@@ -104,14 +104,13 @@ function eseguiBackup(sourcePath) {
 
    function scriviLockInfo() {
     try { 
-        const now = Date.now(); // <--- AGGIUNTA FONDAMENTALE
+        const now = Date.now(); 
         fs.writeFileSync(pathLockInfo, JSON.stringify({ 
             user: MY_HOSTNAME, 
             timestamp: now,
             data_leggibile: new Date(now).toLocaleString() 
         }, null, 2)); 
     } catch (e) {
-        // Ora se c'è un errore lo vediamo a video!
         console.error("ERRORE CRITICO SCRITTURA LOCK:", e.message);
     }
 }
@@ -121,11 +120,10 @@ function leggiLockInfo() {
     try { return JSON.parse(fs.readFileSync(pathLockInfo, 'utf8')); } catch (e) { return null; }
 }
 
-// --- FUNZIONE MODIFICATA PER GESTIRE IL TIMEOUT/CRASH SU DRIVE ---
 function avviaDatabaseInEsclusiva() {
     console.log(`\n--- AVVIO SISTEMA (${MY_HOSTNAME}) ---`);
     
-    // Timeout di tolleranza: se il lock è vecchio di 2 minuti, assumiamo crash e prendiamo possesso
+    // Timeout di tolleranza
     const LOCK_TIMEOUT_MS = 120000; 
 
     if (fs.existsSync(pathDbLibero)) {
@@ -143,17 +141,17 @@ function avviaDatabaseInEsclusiva() {
         const info = leggiLockInfo();
         const now = Date.now();
         
-        // CASO 1: Sono io (riavvio o crash precedente sullo stesso PC)
+        // CASO 1: Sono io
         if (info && info.user === MY_HOSTNAME) {
             console.log("> Rilevato crash precedente (stesso PC). Ripristino sessione.");
             scriviLockInfo();
             dbIsLockedByMe = true;
         } 
-        // CASO 2: Lock scaduto (crash su altro PC o PC spento brutalmente)
+        // CASO 2: Lock scaduto
         else if (info && (now - info.timestamp > LOCK_TIMEOUT_MS)) {
             console.log(`> ATTENZIONE: Lock di ${info.user} scaduto (${(now - info.timestamp)/1000}s fa).`);
             console.log("> ASSUMO IL CONTROLLO (Recovery).");
-            scriviLockInfo(); // Sovrascrivo
+            scriviLockInfo(); 
             dbIsLockedByMe = true;
         }
         // CASO 3: Lock attivo di qualcun altro
@@ -172,10 +170,10 @@ function avviaDatabaseInEsclusiva() {
 
     try {
         const database = new Database(pathDbOccupato);
-        database.pragma('journal_mode = DELETE'); // Fondamentale per Drive
+        database.pragma('journal_mode = DELETE'); 
         database.pragma('foreign_keys = ON');
 
-        // STRUTTURA TABELLE (INVARIATA)
+        // STRUTTURA TABELLE
         database.exec(`
             CREATE TABLE IF NOT EXISTS Utenti (ID INTEGER PRIMARY KEY AUTOINCREMENT, Email TEXT UNIQUE, Password TEXT, Nome TEXT, Amministratore INTEGER DEFAULT 0);
             CREATE TABLE IF NOT EXISTS Tipologia (ID INTEGER PRIMARY KEY AUTOINCREMENT, Tipologia TEXT);
@@ -272,7 +270,6 @@ const checkAdmin = (req, res, next) => (req.session && req.session.isAdmin === 1
 app.get('/login.html', (req, res) => { if (req.session.userId) return res.redirect('/'); res.sendFile(path.join(publicPath, 'login.html')); });
 app.get('/', (req, res) => { if (!req.session.userId) return res.redirect('/login.html'); res.sendFile(path.join(publicPath, 'index.html')); });
 
-// FIX PER LINK VECCHI (es. servizi.html -> dashboard_servizi)
 app.get('/servizi.html', (req, res) => res.redirect('/dashboard_servizi'));
 
 ['agora','gestione_associazioni','gestione_referenti','gestione_altri','anagrafica_singola','gestione_mailinglist','dashboard_servizi','gestione_utenti','anagrafica','agora_tipo_eventi'].forEach(p => {
@@ -295,7 +292,7 @@ if (!db) {
     setTimeout(() => process.exit(1), 20000);
 } else {
 
-    // --- HEARTBEAT: Aggiorna il lock ogni 60 sec per dire "Sono Vivo" ---
+    // --- HEARTBEAT ---
     setInterval(() => {
         if (dbIsLockedByMe) scriviLockInfo();
     }, 60000);
@@ -339,9 +336,8 @@ if (!db) {
     });
     app.delete('/api/telefono/:id', checkAuth, checkAdmin, (req, res) => { try{db.prepare("DELETE FROM Telefono WHERE ID=?").run(req.params.id);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
 
-    // --- REFERENTI & ALTRI (FIX PUT MANCANTI) ---
+    // --- REFERENTI & ALTRI ---
     
-    // Funzione base per query
     const getAllReferenti = () => db.prepare("SELECT r.*, a.SOGGETTO FROM Referenti r LEFT JOIN Associazioni a ON r.ID_Associazione=a.ID ORDER BY r.Nome").all();
     const getAllAltri = () => db.prepare("SELECT s.*, a.SOGGETTO FROM AltriSoggetti s LEFT JOIN Associazioni a ON s.ID_Associazione=a.ID ORDER BY s.Nome").all();
 
@@ -350,7 +346,6 @@ if (!db) {
 
     app.post('/api/referenti', checkAuth, checkAdmin, (req, res) => { try{db.prepare("INSERT INTO Referenti(ID_Associazione,Nome,MAILREFERENTE) VALUES(?,?,?)").run(req.body.ID_Associazione,req.body.Nome,req.body.MAILREFERENTE);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
     
-    // --- FIX: AGGIUNTO PUT PER REFERENTI ---
     app.put('/api/referenti/:id', checkAuth, checkAdmin, (req, res) => {
         try {
             db.prepare("UPDATE Referenti SET ID_Associazione=?, Nome=?, MAILREFERENTE=? WHERE ID=?").run(req.body.ID_Associazione, req.body.Nome, req.body.MAILREFERENTE, req.params.id);
@@ -366,14 +361,13 @@ if (!db) {
 
     app.post('/api/altri-soggetti', checkAuth, checkAdmin, (req, res) => { try{db.prepare("INSERT INTO AltriSoggetti(ID_Associazione,Nome,MAILALTRISOGGETTI) VALUES(?,?,?)").run(req.body.ID_Associazione,req.body.Nome,req.body.MAILALTRISOGGETTI);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
     
-    // --- FIX: AGGIUNTO PUT PER ALTRI SOGGETTI ---
     app.put('/api/altri-soggetti/:id', checkAuth, checkAdmin, (req, res) => {
         try {
             db.prepare("UPDATE AltriSoggetti SET ID_Associazione=?, Nome=?, MAILALTRISOGGETTI=? WHERE ID=?").run(req.body.ID_Associazione, req.body.Nome, req.body.MAILALTRISOGGETTI, req.params.id);
             res.json({success:true});
         } catch(e) { res.status(500).json({error:e.message}); }
     });
-    // Alias per compatibilità con frontend misto
+    // Alias
     app.put('/api/altrisoggetti/:id', checkAuth, checkAdmin, (req, res) => {
         try {
             db.prepare("UPDATE AltriSoggetti SET ID_Associazione=?, Nome=?, MAILALTRISOGGETTI=? WHERE ID=?").run(req.body.ID_Associazione, req.body.Nome, req.body.MAILALTRISOGGETTI, req.params.id);
@@ -522,12 +516,10 @@ if (!db) {
                 
                 const addFileToZip = (filePath, zipName) => {
                     if(!filePath) return;
-                    // Prova path relativo a archivio_files
                     const cleanP = filePath.replace(/^\/|^\\[a-z0-9_]+\\/, '');
                     const fullP = path.join(uploadDir, cleanP.replace('verbali/','verbali\\').replace('documenti/','documenti\\'));
                     if(fs.existsSync(fullP)) archive.file(fullP, { name: zipName });
                     else {
-                        // Fallback assoluto
                         const fullPB = path.join(rootDir, filePath.replace(/^\//,''));
                         if(fs.existsSync(fullPB)) archive.file(fullPB, { name: zipName });
                     }
@@ -601,7 +593,7 @@ if (!db) {
     app.get('/api/maillist', checkAuth, (req, res) => res.json(db.prepare("SELECT * FROM MailList ORDER BY Descrizione").all()));
     app.post('/api/maillist', checkAuth, checkAdmin, (req, res) => { try{res.json({success:true, id:db.prepare("INSERT INTO MailList(Descrizione,Note) VALUES(?,?)").run(req.body.Descrizione,req.body.Note).lastInsertRowid});}catch(e){res.status(500).json({error:e.message});} });
     app.delete('/api/maillist/:id', checkAuth, checkAdmin, (req, res) => { try{db.transaction(()=>{db.prepare("DELETE FROM ListaMail WHERE IDListaMail=?").run(req.params.id);db.prepare("DELETE FROM MailList WHERE ID=?").run(req.params.id);})();res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
-    app.get('/api/maillist/:id/members', checkAuth, (req, res) => res.json(db.prepare(`SELECT lm.ID, lm.IDMail, lm.TipoInvio, m.Indirizzo, a.SOGGETTO FROM ListaMail lm JOIN Mail m ON lm.IDMail=m.ID JOIN Associazioni a ON m.IDAssociazione=a.ID WHERE lm.IDListaMail=? ORDER BY a.SOGGETTO`).all(req.params.id)));
+    app.get('/api/maillist/:id/members', checkAuth, (req, res) => res.json(db.prepare(`SELECT lm.ID, lm.IDMail, lm.TipoInvio, m.Indirizzo, a.SOGGETTO, m.Predefinito FROM ListaMail lm JOIN Mail m ON lm.IDMail=m.ID JOIN Associazioni a ON m.IDAssociazione=a.ID WHERE lm.IDListaMail=? ORDER BY a.SOGGETTO`).all(req.params.id)));
     app.post('/api/maillist/:id/add', checkAuth, checkAdmin, (req, res) => {
         const {IDMail,TipoInvio,EmailRaw,IDAssociazione}=req.body; const idL=req.params.id;
         try {
@@ -614,11 +606,72 @@ if (!db) {
         } catch(e){res.status(500).json({error:e.message});}
     });
     app.delete('/api/maillist/member/:id', checkAuth, checkAdmin, (req, res) => { try{db.prepare("DELETE FROM ListaMail WHERE ID=?").run(req.params.id);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
+    
     app.get('/api/maillist/search/associazioni', checkAuth, (req, res) => {
         const {q,tipo} = req.query; if((!q || q.length<3) && !tipo) return res.json([]);
         let sql = `SELECT m.ID as IDMail, m.Indirizzo, m.Predefinito, a.ID as IDAssoc, a.SOGGETTO, a.ID_TIPOLOGIA FROM Mail m JOIN Associazioni a ON m.IDAssociazione=a.ID LEFT JOIN Referenti r ON a.ID=r.ID_Associazione LEFT JOIN AltriSoggetti s ON a.ID=s.ID_Associazione WHERE 1=1`;
         const params=[]; if(tipo){sql+=` AND a.ID_TIPOLOGIA=?`;params.push(tipo);} if(q){sql+=` AND (a.SOGGETTO LIKE ? OR r.Nome LIKE ? OR s.Nome LIKE ?)`;params.push(`%${q}%`,`%${q}%`,`%${q}%`);}
         res.json(db.prepare(sql+` GROUP BY m.ID ORDER BY a.SOGGETTO LIMIT 100`).all(...params));
+    });
+
+    // NUOVA RICERCA UNIFICATA (Aggiornamento Richiesto)
+    app.get('/api/maillist/search/unified', checkAuth, (req, res) => {
+        const { q } = req.query;
+        if (!q || q.length < 3) return res.json([]);
+
+        const term = `%${q}%`;
+        
+        const sql = `
+            SELECT 
+                m.ID as IDMail,
+                m.Indirizzo, 
+                a.ID as IDAssociazione, 
+                a.SOGGETTO, 
+                'Associazione' as Fonte,
+                m.Predefinito
+            FROM Mail m 
+            JOIN Associazioni a ON m.IDAssociazione = a.ID 
+            WHERE (a.SOGGETTO LIKE ? OR m.Indirizzo LIKE ?)
+            
+            UNION ALL
+            
+            SELECT 
+                NULL as IDMail,
+                r.MAILREFERENTE as Indirizzo, 
+                a.ID as IDAssociazione, 
+                a.SOGGETTO, 
+                'Referente: ' || r.Nome as Fonte,
+                0 as Predefinito
+            FROM Referenti r 
+            JOIN Associazioni a ON r.ID_Associazione = a.ID 
+            WHERE r.MAILREFERENTE IS NOT NULL AND r.MAILREFERENTE <> '' 
+            AND (a.SOGGETTO LIKE ? OR r.Nome LIKE ? OR r.MAILREFERENTE LIKE ?)
+            
+            UNION ALL
+            
+            SELECT 
+                NULL as IDMail,
+                s.MAILALTRISOGGETTI as Indirizzo, 
+                a.ID as IDAssociazione, 
+                a.SOGGETTO, 
+                'Altro: ' || s.Nome as Fonte,
+                0 as Predefinito
+            FROM AltriSoggetti s 
+            JOIN Associazioni a ON s.ID_Associazione = a.ID 
+            WHERE s.MAILALTRISOGGETTI IS NOT NULL AND s.MAILALTRISOGGETTI <> '' 
+            AND (a.SOGGETTO LIKE ? OR s.Nome LIKE ? OR s.MAILALTRISOGGETTI LIKE ?)
+            
+            ORDER BY SOGGETTO ASC, Fonte ASC
+            LIMIT 100
+        `;
+
+        try {
+            // Parametri: 2 per Associazione, 3 per Referente, 3 per Altri = 8 totali
+            const rows = db.prepare(sql).all(term, term, term, term, term, term, term, term);
+            res.json(rows);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     // BACKUP
