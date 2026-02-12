@@ -190,7 +190,13 @@ function avviaDatabaseInEsclusiva() {
             CREATE TABLE IF NOT EXISTS AgoraPresenti (ID INTEGER PRIMARY KEY AUTOINCREMENT, IDRiunioni INTEGER, IDAssociazione INTEGER, Rappresentante TEXT, FOREIGN KEY(IDRiunioni) REFERENCES Agora(ID) ON DELETE CASCADE, FOREIGN KEY(IDAssociazione) REFERENCES Associazioni(ID) ON DELETE CASCADE);
             CREATE TABLE IF NOT EXISTS MailList (ID INTEGER PRIMARY KEY AUTOINCREMENT, Descrizione TEXT, Note TEXT);
             CREATE TABLE IF NOT EXISTS ListaMail (ID INTEGER PRIMARY KEY AUTOINCREMENT, IDListaMail INTEGER, IDMail INTEGER, TipoInvio TEXT DEFAULT 'CCN', FOREIGN KEY(IDListaMail) REFERENCES MailList(ID) ON DELETE CASCADE, FOREIGN KEY(IDMail) REFERENCES Mail(ID) ON DELETE CASCADE, UNIQUE(IDListaMail, IDMail));
+            CREATE TABLE IF NOT EXISTS Report (ID INTEGER PRIMARY KEY AUTOINCREMENT, Password TEXT NOT NULL);
         `);
+
+        const reportColumns = database.prepare("PRAGMA table_info(Report)").all().map(r => r.name);
+        if (!reportColumns.includes('Password')) {
+            database.exec("ALTER TABLE Report ADD COLUMN Password TEXT NOT NULL DEFAULT ''");
+        }
 
         // Seed
         if(database.prepare("SELECT COUNT(*) as c FROM Tipologia").get().c === 0) {
@@ -198,6 +204,9 @@ function avviaDatabaseInEsclusiva() {
         }
         if(database.prepare("SELECT COUNT(*) as c FROM AgoraTipoEvento").get().c === 0) {
             database.prepare("INSERT INTO AgoraTipoEvento (IntestazionePagina) VALUES (?)").run('Tavolo Agorà');
+        }
+        if(database.prepare("SELECT COUNT(*) as c FROM Report").get().c === 0) {
+            database.prepare("INSERT INTO Report (Password) VALUES (?)").run('');
         }
 
         console.log("> Database connesso.");
@@ -248,6 +257,71 @@ const deletePhysicalFile = (relPath) => {
     const fullPathB = path.join(rootDir, relPath.replace(/^\//, ''));
     if(fs.existsSync(fullPath)) try{fs.unlinkSync(fullPath);}catch(e){}
     else if(fs.existsSync(fullPathB)) try{fs.unlinkSync(fullPathB);}catch(e){}
+};
+
+const isLikelyUrl = (value) => typeof value === 'string' && /^https?:\/\//i.test(value.trim());
+
+const clearDirectory = (dirPath) => {
+    if (!dirPath || path.parse(dirPath).root === dirPath) {
+        throw new Error('Percorso non valido per la pulizia');
+    }
+    if (!fs.existsSync(dirPath)) return;
+    fs.readdirSync(dirPath, { withFileTypes: true }).forEach((entry) => {
+        const full = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) fs.rmSync(full, { recursive: true, force: true });
+        else fs.unlinkSync(full);
+    });
+};
+
+const copyDirectory = (src, dest) => {
+    if (!fs.existsSync(src)) return;
+    fs.mkdirSync(dest, { recursive: true });
+    fs.readdirSync(src, { withFileTypes: true }).forEach((entry) => {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) copyDirectory(srcPath, destPath);
+        else fs.copyFileSync(srcPath, destPath);
+    });
+};
+
+const getUniqueDestPath = (destDir, fileName) => {
+    const parsed = path.parse(fileName);
+    let candidate = path.join(destDir, fileName);
+    let counter = 1;
+    while (fs.existsSync(candidate)) {
+        const nextName = `${parsed.name}_${counter}${parsed.ext}`;
+        candidate = path.join(destDir, nextName);
+        counter += 1;
+    }
+    return candidate;
+};
+
+const copyFlatFiles = (src, dest) => {
+    if (!fs.existsSync(src)) return;
+    fs.mkdirSync(dest, { recursive: true });
+    fs.readdirSync(src, { withFileTypes: true }).forEach((entry) => {
+        const srcPath = path.join(src, entry.name);
+        if (entry.isDirectory()) {
+            copyFlatFiles(srcPath, dest);
+            return;
+        }
+        const destPath = getUniqueDestPath(dest, entry.name);
+        fs.copyFileSync(srcPath, destPath);
+    });
+};
+
+const stripReportFilePath = (value) => {
+    if (!value || typeof value !== 'string') return value;
+    return path.basename(value);
+};
+
+const normalizeReportRow = (row) => {
+    if (!row || typeof row !== 'object') return row;
+    const normalized = { ...row };
+    ['Verbale', 'Documenti'].forEach((key) => {
+        if (normalized[key]) normalized[key] = stripReportFilePath(normalized[key]);
+    });
+    return normalized;
 };
 
 app.use(express.json());
@@ -308,6 +382,22 @@ if (!db) {
     });
     app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({success:true})));
     app.get('/api/me', checkAuth, (req, res) => res.json({logged:true, nome:req.session.userName, isAdmin:req.session.isAdmin===1}));
+
+    app.get('/api/report/settings', checkAuth, (req, res) => {
+        const row = db.prepare("SELECT ID, Password FROM Report ORDER BY ID ASC LIMIT 1").get();
+        if (!row) return res.status(404).json({ error: "Impostazioni report non trovate" });
+        res.json(row);
+    });
+    app.put('/api/report/settings', checkAuth, (req, res) => {
+        const payload = { Password: req.body.Password || '' };
+        const row = db.prepare("SELECT ID FROM Report ORDER BY ID ASC LIMIT 1").get();
+        if (!row) return res.status(404).json({ error: "Impostazioni report non trovate" });
+        db.prepare("UPDATE Report SET Password=? WHERE ID=?").run(
+            payload.Password,
+            row.ID
+        );
+        res.json({ success: true });
+    });
 
     // MASTER DATA
     app.get('/api/associazioni', checkAuth, (req, res) => res.json(db.prepare("SELECT a.*, t.Tipologia as Tipologia_Nome FROM Associazioni a LEFT JOIN Tipologia t ON a.ID_TIPOLOGIA = t.ID ORDER BY a.SOGGETTO").all()));
@@ -533,6 +623,43 @@ if (!db) {
             archive.finalize();
         } catch (e) { res.status(500).send("Errore ZIP: " + e.message); }
     });
+
+    app.post('/api/report/export-excel', checkAuth, (req, res) => {
+        try {
+            const localReportDir = path.join(rootDir, 'Report');
+            const cartellaExcel = path.join(localReportDir, 'Excel');
+            const cartellaDocumenti = path.join(localReportDir, 'DocumentiPDF');
+
+            const tables = [
+                { name: 'agora', sql: 'SELECT * FROM Agora' },
+                { name: 'agorapresenti', sql: 'SELECT * FROM AgoraPresenti' },
+                { name: 'agoratipoevento', sql: 'SELECT * FROM AgoraTipoEvento' },
+                { name: 'associazioni', sql: 'SELECT * FROM Associazioni' },
+                { name: 'report', sql: 'SELECT ID, Password FROM Report' }
+            ];
+
+            const workbook = XLSX.utils.book_new();
+            tables.forEach((t) => {
+                const rows = db.prepare(t.sql).all().map(normalizeReportRow);
+                const sheet = XLSX.utils.json_to_sheet(rows);
+                XLSX.utils.book_append_sheet(workbook, sheet, t.name);
+            });
+
+            fs.mkdirSync(cartellaExcel, { recursive: true });
+            const excelPath = path.join(cartellaExcel, 'BaseDatiExcel.xlsx');
+            if (fs.existsSync(excelPath)) fs.unlinkSync(excelPath);
+            XLSX.writeFile(workbook, excelPath);
+
+            fs.mkdirSync(cartellaDocumenti, { recursive: true });
+            clearDirectory(cartellaDocumenti);
+            copyFlatFiles(uploadDir, cartellaDocumenti);
+
+            res.json({ success: true, excelPath });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     
     // --- RUNTS ---
     app.get('/api/runts/search', checkAuth, (req, res) => {

@@ -52,6 +52,13 @@
                         <a href="/api/report/agora-zip" target="_blank" class="btn bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200 w-full font-bold">
                             📦 ZIP Completo (File + PDF)
                         </a>
+                        <button type="button" onclick="exportReportExcel()" class="btn bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200 w-full font-bold">
+                            📗 Esportazione per report
+                        </button>
+                        <button type="button" onclick="openReportSettings()" class="btn bg-cyan-100 text-cyan-700 border-cyan-200 hover:bg-cyan-200 w-full font-bold">
+                            ⚙️ Impostazioni report
+                        </button>
+                        <div id="reportExportStatus" class="text-xs text-gray-400"></div>
                     </div>
                 </div>
             </div>
@@ -114,6 +121,85 @@
 
     <!-- Script Gestione Import (Invariato) -->
     <script>
+        function openReportSettings() {
+            const modal = document.getElementById('modal-report-settings');
+            if (modal) modal.checked = true;
+            loadReportSettings();
+        }
+
+        async function loadReportSettings() {
+            const status = document.getElementById('reportSettingsStatus');
+            if (status) {
+                status.textContent = 'Caricamento...';
+                status.className = 'text-xs text-gray-400 mt-2';
+            }
+            try {
+                const res = await fetch('/api/report/settings');
+                if (!res.ok) throw new Error('Accesso negato o errore di rete');
+                const data = await res.json();
+                document.getElementById('reportPassword').value = data.Password || '';
+                if (status) {
+                    status.textContent = 'Impostazioni caricate.';
+                    status.className = 'text-xs text-green-600 mt-2';
+                }
+            } catch (err) {
+                if (status) {
+                    status.textContent = 'Errore nel caricamento impostazioni.';
+                    status.className = 'text-xs text-red-600 mt-2';
+                }
+            }
+        }
+
+        async function saveReportSettings() {
+            const status = document.getElementById('reportSettingsStatus');
+            if (status) {
+                status.textContent = 'Salvataggio...';
+                status.className = 'text-xs text-gray-400 mt-2';
+            }
+            const payload = {
+                Password: document.getElementById('reportPassword').value.trim()
+            };
+            try {
+                const res = await fetch('/api/report/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error('Errore nel salvataggio');
+                if (status) {
+                    status.textContent = 'Impostazioni salvate.';
+                    status.className = 'text-xs text-green-600 mt-2';
+                }
+            } catch (err) {
+                if (status) {
+                    status.textContent = 'Errore nel salvataggio impostazioni.';
+                    status.className = 'text-xs text-red-600 mt-2';
+                }
+            }
+        }
+
+        async function exportReportExcel() {
+            const status = document.getElementById('reportExportStatus');
+            if (status) {
+                status.textContent = 'Esportazione in corso...';
+                status.className = 'text-xs text-gray-400';
+            }
+            try {
+                const res = await fetch('/api/report/export-excel', { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok || !data.success) throw new Error(data.error || 'Errore esportazione');
+                if (status) {
+                    status.textContent = 'Esportazione completata.';
+                    status.className = 'text-xs text-green-600';
+                }
+            } catch (err) {
+                if (status) {
+                    status.textContent = 'Errore: ' + err.message;
+                    status.className = 'text-xs text-red-600';
+                }
+            }
+        }
+
         const fileInput = document.getElementById('fileRuntsInput');
         const btnSubmit = document.getElementById('btnSubmit');
         fileInput.addEventListener('change', function() { if (this.files && this.files.length > 0) btnSubmit.disabled = false; else btnSubmit.disabled = true; });
@@ -144,6 +230,27 @@
                 resultMsg.classList.add('text-red-600');
             });
         });
+
     </script>
+
+    <input type="checkbox" id="modal-report-settings" class="modal-toggle" />
+    <div class="modal">
+        <div class="modal-box rounded-3xl p-8 max-w-3xl">
+            <h3 class="font-black text-2xl uppercase mb-6 border-b-4 border-cyan-600 pb-2 text-cyan-600 italic">Impostazioni Reportistica Agorà</h3>
+            <form class="space-y-4">
+                <div class="form-control">
+                    <label class="label text-xs font-bold text-gray-400 uppercase">Password</label>
+                    <input type="text" id="reportPassword" class="input input-bordered font-bold text-gray-700 w-full" placeholder="Password report" />
+                </div>
+
+                <div id="reportSettingsStatus" class="text-xs text-gray-400 mt-2"></div>
+
+                <div class="modal-action flex justify-between mt-6">
+                    <label for="modal-report-settings" class="btn btn-ghost uppercase text-xs font-bold font-black">Chiudi</label>
+                    <button type="button" onclick="saveReportSettings()" class="btn bg-cyan-600 border-none text-white font-bold uppercase px-8 text-xs shadow-lg">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </body>
 </html>

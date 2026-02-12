@@ -138,6 +138,14 @@ CREATE TABLE IF NOT EXISTS "Utenti" (
 	"Amministratore"	INTEGER DEFAULT 0,
 	PRIMARY KEY("ID" AUTOINCREMENT)
 );
+CREATE TABLE IF NOT EXISTS "Report" (
+	"ID"	INTEGER NOT NULL,
+	"CartellaExcel"	TEXT NOT NULL,
+	"CartellaDocumenti"	TEXT NOT NULL,
+	"UserCompleto"	TEXT NOT NULL,
+	"UserLimitato"	TEXT NOT NULL,
+	PRIMARY KEY("ID" AUTOINCREMENT)
+);
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_mail" ON "Mail" (
 	"IDAssociazione",
 	"Indirizzo"
