@@ -307,14 +307,34 @@ const getUniqueDestPath = (destDir, fileName) => {
 const copyFlatFiles = (src, dest) => {
     if (!fs.existsSync(src)) return;
     fs.mkdirSync(dest, { recursive: true });
+    
     fs.readdirSync(src, { withFileTypes: true }).forEach((entry) => {
         const srcPath = path.join(src, entry.name);
+        
+        // Ricorsione nelle sottocartelle
         if (entry.isDirectory()) {
             copyFlatFiles(srcPath, dest);
             return;
         }
-        const destPath = getUniqueDestPath(dest, entry.name);
-        fs.copyFileSync(srcPath, destPath);
+        
+        // Copia SOLO i file PDF
+        if (!entry.name.toLowerCase().endsWith('.pdf')) {
+            return;
+        }
+        
+        // Verifica che il file esista effettivamente
+        if (!fs.existsSync(srcPath)) {
+            console.warn(`[REPORT] File PDF non trovato, ignorato: ${srcPath}`);
+            return;
+        }
+        
+        try {
+            const destPath = getUniqueDestPath(dest, entry.name);
+            fs.copyFileSync(srcPath, destPath);
+            console.log(`[REPORT] PDF copiato: ${entry.name}`);
+        } catch (err) {
+            console.warn(`[REPORT] Impossibile copiare PDF ${srcPath}: ${err.message}`);
+        }
     });
 };
 
@@ -657,6 +677,8 @@ if (!db) {
 
     app.post('/api/report/export-excel', checkAuth, (req, res) => {
         try {
+            console.log('[REPORT] Inizio esportazione Excel + PDF...');
+            
             // Verifiche preventive
             if (!fs.existsSync(reportExcelDir)) {
                 fs.mkdirSync(reportExcelDir, { recursive: true });
@@ -673,6 +695,7 @@ if (!db) {
                 { name: 'report', sql: 'SELECT ID, Password FROM Report' }
             ];
 
+            console.log('[REPORT] Creazione file Excel...');
             const workbook = XLSX.utils.book_new();
             tables.forEach((t) => {
                 const rows = db.prepare(t.sql).all().map(normalizeReportRow);
@@ -683,12 +706,16 @@ if (!db) {
             const excelPath = path.join(reportExcelDir, 'BaseDatiExcel.xlsx');
             if (fs.existsSync(excelPath)) fs.unlinkSync(excelPath);
             XLSX.writeFile(workbook, excelPath);
+            console.log(`[REPORT] File Excel salvato: ${excelPath}`);
 
+            console.log('[REPORT] Copia file PDF per aggiornamento...');
             clearDirectory(reportPdfDir);
             copyFlatFiles(uploadDir, reportPdfDir);
+            console.log('[REPORT] Copia file PDF completata');
 
             res.json({ success: true, excelPath, folder: reportDir });
         } catch (e) {
+            console.error('[REPORT] Errore esportazione:', e);
             res.status(500).json({ error: e.message });
         }
     });
