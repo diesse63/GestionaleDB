@@ -55,6 +55,9 @@
                         <button type="button" onclick="exportReportExcel()" class="btn bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200 w-full font-bold">
                             📗 Esportazione per report
                         </button>
+                        <button type="button" onclick="openReportFolder()" class="btn bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 w-full font-bold">
+                            📁 Apri cartella Report
+                        </button>
                         <button type="button" onclick="openReportSettings()" class="btn bg-cyan-100 text-cyan-700 border-cyan-200 hover:bg-cyan-200 w-full font-bold">
                             ⚙️ Impostazioni report
                         </button>
@@ -121,6 +124,25 @@
 
     <!-- Script Gestione Import (Invariato) -->
     <script>
+        function openReportFolder() {
+            // Su sistemi desktop, chiediamo al backend di aprire la cartella
+            fetch('/api/report/open-folder', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        const status = document.getElementById('reportExportStatus');
+                        if (status) {
+                            status.textContent = '📁 Cartella Report aperta!';
+                            status.className = 'text-xs text-blue-600 font-semibold';
+                            setTimeout(() => { status.textContent = ''; }, 3000);
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.log('Nota: Apertura cartella non disponibile su web. Cartella: ./Report');
+                });
+        }
+
         function openReportSettings() {
             const modal = document.getElementById('modal-report-settings');
             if (modal) modal.checked = true;
@@ -180,23 +202,41 @@
 
         async function exportReportExcel() {
             const status = document.getElementById('reportExportStatus');
+            const btn = event.target;
+            
+            // Disabilita il bottone durante l'esportazione
+            btn.disabled = true;
+            
             if (status) {
-                status.textContent = 'Esportazione in corso...';
-                status.className = 'text-xs text-gray-400';
+                status.textContent = '⏳ Esportazione in corso...';
+                status.className = 'text-xs text-yellow-500 font-semibold';
             }
+            
             try {
                 const res = await fetch('/api/report/export-excel', { method: 'POST' });
                 const data = await res.json();
-                if (!res.ok || !data.success) throw new Error(data.error || 'Errore esportazione');
-                if (status) {
-                    status.textContent = 'Esportazione completata.';
-                    status.className = 'text-xs text-green-600';
+                
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Errore esportazione');
                 }
+                
+                if (status) {
+                    status.textContent = '✅ Esportazione completata! File salvato nella cartella Report.';
+                    status.className = 'text-xs text-green-600 font-semibold';
+                }
+                
+                // Notifica di successo
+                console.log('Esportazione completata:', data);
+                
             } catch (err) {
                 if (status) {
-                    status.textContent = 'Errore: ' + err.message;
-                    status.className = 'text-xs text-red-600';
+                    status.textContent = '❌ Errore: ' + err.message;
+                    status.className = 'text-xs text-red-600 font-semibold';
                 }
+                console.error('Errore esportazione:', err);
+            } finally {
+                // Riabilita il bottone
+                btn.disabled = false;
             }
         }
 

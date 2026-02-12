@@ -61,6 +61,11 @@ const verbaliDir = path.join(uploadDir, 'verbali');
 const documentiDir = path.join(uploadDir, 'documenti');
 const tempDir = path.join(uploadDir, 'temp');
 
+// Cartelle Report
+const reportDir = path.join(rootDir, 'Report');
+const reportExcelDir = path.join(reportDir, 'Excel');
+const reportPdfDir = path.join(reportDir, 'DocumentiPDF');
+
 const MY_HOSTNAME = os.hostname();
 let db = null;
 let dbIsLockedByMe = false;
@@ -72,6 +77,9 @@ try {
     if (!fs.existsSync(verbaliDir)) fs.mkdirSync(verbaliDir);
     if (!fs.existsSync(documentiDir)) fs.mkdirSync(documentiDir);
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+    if (!fs.existsSync(reportDir)) fs.mkdirSync(reportDir);
+    if (!fs.existsSync(reportExcelDir)) fs.mkdirSync(reportExcelDir);
+    if (!fs.existsSync(reportPdfDir)) fs.mkdirSync(reportPdfDir);
 } catch (err) { console.error("Errore cartelle:", err.message); }
 
 // ============================================================================
@@ -399,6 +407,29 @@ if (!db) {
         res.json({ success: true });
     });
 
+    app.post('/api/report/open-folder', checkAuth, (req, res) => {
+        try {
+            const { exec } = require('child_process');
+            let cmd;
+            if (process.platform === 'win32') {
+                cmd = `explorer "${reportDir}"`;
+            } else if (process.platform === 'darwin') {
+                cmd = `open "${reportDir}"`;
+            } else {
+                cmd = `xdg-open "${reportDir}"`;
+            }
+            exec(cmd, (err) => {
+                if (err) {
+                    res.json({ success: false, error: err.message });
+                } else {
+                    res.json({ success: true });
+                }
+            });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // MASTER DATA
     app.get('/api/associazioni', checkAuth, (req, res) => res.json(db.prepare("SELECT a.*, t.Tipologia as Tipologia_Nome FROM Associazioni a LEFT JOIN Tipologia t ON a.ID_TIPOLOGIA = t.ID ORDER BY a.SOGGETTO").all()));
     app.post('/api/associazioni', checkAuth, checkAdmin, (req, res) => {
@@ -626,9 +657,13 @@ if (!db) {
 
     app.post('/api/report/export-excel', checkAuth, (req, res) => {
         try {
-            const localReportDir = path.join(rootDir, 'Report');
-            const cartellaExcel = path.join(localReportDir, 'Excel');
-            const cartellaDocumenti = path.join(localReportDir, 'DocumentiPDF');
+            // Verifiche preventive
+            if (!fs.existsSync(reportExcelDir)) {
+                fs.mkdirSync(reportExcelDir, { recursive: true });
+            }
+            if (!fs.existsSync(reportPdfDir)) {
+                fs.mkdirSync(reportPdfDir, { recursive: true });
+            }
 
             const tables = [
                 { name: 'agora', sql: 'SELECT * FROM Agora' },
@@ -645,16 +680,14 @@ if (!db) {
                 XLSX.utils.book_append_sheet(workbook, sheet, t.name);
             });
 
-            fs.mkdirSync(cartellaExcel, { recursive: true });
-            const excelPath = path.join(cartellaExcel, 'BaseDatiExcel.xlsx');
+            const excelPath = path.join(reportExcelDir, 'BaseDatiExcel.xlsx');
             if (fs.existsSync(excelPath)) fs.unlinkSync(excelPath);
             XLSX.writeFile(workbook, excelPath);
 
-            fs.mkdirSync(cartellaDocumenti, { recursive: true });
-            clearDirectory(cartellaDocumenti);
-            copyFlatFiles(uploadDir, cartellaDocumenti);
+            clearDirectory(reportPdfDir);
+            copyFlatFiles(uploadDir, reportPdfDir);
 
-            res.json({ success: true, excelPath });
+            res.json({ success: true, excelPath, folder: reportDir });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
