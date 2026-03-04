@@ -58,23 +58,32 @@
         </div>
 
         <!-- FILA INFERIORE: Servizi -->
-        <div class="flex justify-center">
-            <div class="w-full md:w-2/3 lg:w-1/2">
-                
-                <!-- 3. SERVIZI (ID per nascondere) -->
-                <a id="cardServizi" href="dashboard_servizi.html" class="card bg-white shadow-xl hover:-translate-y-2 transition-all duration-300 border-b-8 border-violet-600 p-8 text-center group cursor-pointer">
-                    <div class="card-body items-center p-0 justify-center">
-                        <div class="text-6xl mb-4 transform group-hover:scale-110 transition-transform">
-                            ⚙️
-                        </div>
-                        <h2 class="text-2xl font-black uppercase text-violet-700">
-                            Servizi
-                        </h2>
-                        <p class="text-gray-400 mt-2">Tabelle di sistema e Configurazioni</p>
-                    </div>
-                </a>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
 
-            </div>
+            <!-- 3. SERVIZI (ID per nascondere) -->
+            <a id="cardServizi" href="dashboard_servizi.html" class="card bg-white shadow-xl hover:-translate-y-2 transition-all duration-300 border-b-8 border-violet-600 p-8 text-center group cursor-pointer">
+                <div class="card-body items-center p-0 justify-center">
+                    <div class="text-6xl mb-4 transform group-hover:scale-110 transition-transform">
+                        ⚙️
+                    </div>
+                    <h2 class="text-2xl font-black uppercase text-violet-700">
+                        Servizi
+                    </h2>
+                    <p class="text-gray-400 mt-2">Tabelle di sistema e Configurazioni</p>
+                </div>
+            </a>
+
+            <!-- 4. GESTIONE DOCUMENTALE -->
+            <a href="/gestione_documentale" class="card bg-white shadow-xl hover:-translate-y-2 transition-all duration-300 border-b-8 border-slate-500 p-8 text-center group cursor-pointer h-full">
+                <div class="card-body items-center p-0 justify-center">
+                    <div class="text-6xl mb-4 transform group-hover:scale-110 transition-transform">📁</div>
+                    <h2 class="text-2xl font-black uppercase text-slate-700">
+                        Gestione Documentale
+                    </h2>
+                    <p class="text-gray-400 mt-2">Nuovo inserimento, elenco documenti e gestione visualizzazione.</p>
+                </div>
+            </a>
+
         </div>
 
     </div>

@@ -101,9 +101,12 @@
             <div class="card bg-white shadow-xl hover:-translate-y-1 transition-all duration-300 border-t-8 border-purple-500">
                 <div class="card-body items-center text-center">
                     <div class="text-5xl mb-2">🏷️</div>
-                    <h2 class="card-title text-2xl font-black uppercase text-purple-600 mb-4">Tipologia Eventi</h2>
-                    <p class="text-sm text-gray-500 mb-6">Categorie per il registro verbali Agorà.</p>
-                    <a href="/agora_tipo_eventi" class="btn bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200 w-full font-bold mt-auto">🏷️ Gestisci Tipologie</a>
+                    <h2 class="card-title text-2xl font-black uppercase text-purple-600 mb-4">Tipologie Eventi e Documenti</h2>
+                    <p class="text-sm text-gray-500 mb-6">Gestione tipologie eventi e documenti.</p>
+                    <div class="w-full mt-auto space-y-2">
+                        <a href="/agora_tipo_eventi" class="btn bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200 w-full font-bold">🏷️ Tipologia Eventi</a>
+                        <a href="/documento_tipi" class="btn bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200 w-full font-bold">📄 Tipologia Documenti</a>
+                    </div>
                 </div>
             </div>
 
@@ -214,10 +217,13 @@
             
             try {
                 const res = await fetch('/api/report/export-excel', { method: 'POST' });
-                const data = await res.json();
+                const contentType = res.headers.get('content-type') || '';
+                const data = contentType.includes('application/json')
+                    ? await res.json()
+                    : { success: false, error: await res.text() };
                 
                 if (!res.ok || !data.success) {
-                    throw new Error(data.error || 'Errore esportazione');
+                    throw new Error((data.error || 'Errore esportazione').toString().replace(/<[^>]*>/g, '').slice(0, 200));
                 }
                 
                 if (status) {

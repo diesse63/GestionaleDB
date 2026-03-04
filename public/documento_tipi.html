@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tipologia Documenti</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-base-200 min-h-screen flex flex-col">
+
+    <div class="navbar bg-white shadow-md z-10 px-4">
+        <div class="flex-1">
+            <a href="/dashboard_servizi" class="btn btn-ghost normal-case text-xl text-emerald-700">⬅ Torna ai Servizi</a>
+        </div>
+        <div class="flex-none">
+            <h1 class="text-xl font-bold uppercase text-base-content mr-4">Tipologia Documenti</h1>
+        </div>
+    </div>
+
+    <div class="container mx-auto p-6 max-w-4xl flex-grow">
+        <div class="alert alert-info shadow-lg mb-6">
+            <i class="fa-solid fa-circle-info text-2xl"></i>
+            <div>
+                <h3 class="font-bold">Gestione Tipologie Documenti</h3>
+                <div class="text-xs">Inserisci o modifica i codici tipologia presenti in tabella DocumentoTipo.</div>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="card-title text-2xl">Elenco Tipologie</h2>
+                    <button onclick="openModal()" class="btn btn-primary btn-sm">
+                        <i class="fa-solid fa-plus"></i> Nuova Tipologia
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr class="bg-base-200">
+                                <th>Tipologia</th>
+                                <th class="w-32 text-center">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+                <div id="loading" class="text-center py-4 hidden"><span class="loading loading-spinner loading-lg"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <dialog id="modalTipo" class="modal">
+        <form id="formTipo" class="modal-box">
+            <h3 class="font-bold text-lg mb-4" id="modalTitle">Nuova Tipologia</h3>
+
+            <div class="form-control w-full">
+                <label class="label"><span class="label-text">Tipologia Documento</span></label>
+                <input type="text" id="inputTipo" placeholder="Es: Verbale" class="input input-bordered w-full" required />
+            </div>
+
+            <div class="modal-action">
+                <button type="button" class="btn" onclick="document.getElementById('modalTipo').close()">Annulla</button>
+                <button type="submit" class="btn btn-primary">Salva</button>
+            </div>
+        </form>
+    </dialog>
+
+    <div class="toast toast-end z-50 hidden" id="toastWrap">
+        <div id="toast" class="alert shadow-lg">
+            <span id="toastMsg">Message</span>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api/documenti-tipi';
+        let currentEditId = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            document.getElementById('formTipo').addEventListener('submit', (e) => {
+                e.preventDefault();
+                saveTipo();
+            });
+        });
+
+        function loadData() {
+            document.getElementById('loading').classList.remove('hidden');
+            fetch(API_URL, { credentials: 'include' })
+                .then(res => res.json())
+                .then(data => {
+                    renderTable(data);
+                    document.getElementById('loading').classList.add('hidden');
+                })
+                .catch(() => {
+                    document.getElementById('loading').classList.add('hidden');
+                    showToast('Errore caricamento dati.', 'error');
+                });
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="2" class="text-center text-gray-500 py-4">Nessuna tipologia trovata.</td></tr>`;
+                return;
+            }
+
+            data.forEach(item => {
+                const tipoText = String(item.Tipo ?? '');
+                const tipoArg = JSON.stringify(tipoText);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="font-bold text-lg">${escapeHtml(tipoText)}</td>
+                    <td class="text-center">
+                        <div class="join">
+                            <button onclick="editTipo(${item.ID}, ${tipoArg})" class="btn btn-sm btn-warning join-item"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteTipo(${item.ID})" class="btn btn-sm btn-error join-item"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function openModal() {
+            document.getElementById('modalTitle').innerText = 'Nuova Tipologia';
+            currentEditId = null;
+            document.getElementById('inputTipo').value = '';
+            document.getElementById('modalTipo').showModal();
+        }
+
+        function editTipo(id, tipo) {
+            document.getElementById('modalTitle').innerText = 'Modifica Tipologia';
+            currentEditId = id;
+            document.getElementById('inputTipo').value = tipo;
+            document.getElementById('modalTipo').showModal();
+        }
+
+        function saveTipo() {
+            const tipoValue = document.getElementById('inputTipo').value.trim();
+
+            if (!tipoValue) {
+                showToast('Inserire una tipologia valida.', 'error');
+                return;
+            }
+
+            const method = currentEditId ? 'PUT' : 'POST';
+            const url = currentEditId ? `${API_URL}/${currentEditId}` : API_URL;
+
+            fetch(url, {
+                method,
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ Tipo: tipoValue })
+            })
+            .then(async res => {
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'Errore durante il salvataggio');
+                return data;
+            })
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('modalTipo').close();
+                    currentEditId = null;
+                    loadData();
+                    showToast('Salvataggio completato!', 'success');
+                } else {
+                    showToast('Errore: ' + (data.error || 'Sconosciuto'), 'error');
+                }
+            })
+            .catch(err => showToast('Errore: ' + err.message, 'error'));
+        }
+
+        function deleteTipo(id) {
+            if (!confirm('Sei sicuro di voler eliminare questa tipologia?')) return;
+
+            fetch(`${API_URL}/${id}`, { method: 'DELETE', credentials: 'include' })
+                .then(async res => {
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(data.error || 'Errore durante l\'eliminazione');
+                    return data;
+                })
+                .then(data => {
+                    if (data.success) {
+                        loadData();
+                        showToast('Eliminato correttamente.', 'success');
+                    } else {
+                        showToast('Errore: ' + (data.error || 'Sconosciuto'), 'error');
+                    }
+                })
+                .catch(err => showToast('Errore: ' + err.message, 'error'));
+        }
+
+        function showToast(msg, type) {
+            const toastWrap = document.getElementById('toastWrap');
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            toast.className = `alert shadow-lg ${type === 'success' ? 'alert-success' : 'alert-error'}`;
+            toastMsg.innerText = msg;
+            toastWrap.classList.remove('hidden');
+            setTimeout(() => toastWrap.classList.add('hidden'), 3000);
+        }
+
+        function escapeHtml(value) {
+            return value
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+    </script>
+</body>
+</html>

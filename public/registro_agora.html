@@ -57,7 +57,7 @@
                         <tr>
                             <th class="py-6 px-8 w-32 align-top">Data</th>
                             <th class="align-top">Evento</th>
-                            <th class="align-top">Anteprima ODG</th>
+                            <th class="align-top">Argomenti Trattati</th>
                             <th class="text-center align-top">Verbale</th>
                             <th class="text-center align-top">Doc</th>
                             <th class="text-right px-8 align-top">Azione</th>
@@ -94,7 +94,7 @@
 
                 <!-- Riga 2: ODG -->
                 <div class="form-control">
-                    <label class="label text-xs font-bold text-gray-400 uppercase">Ordine del Giorno</label>
+                    <label class="label text-xs font-bold text-gray-400 uppercase">Argomenti Trattati</label>
                     <textarea id="ago-odg" class="textarea textarea-bordered h-24 font-medium text-sm" placeholder="Inserisci i punti..."></textarea>
                 </div>
 
@@ -135,6 +135,12 @@
                             </thead>
                             <tbody id="presentiTableBody"></tbody>
                         </table>
+                    </div>
+
+                    <div class="mt-3 text-right">
+                        <button type="button" id="btn-create-maillist" onclick="handleCreateMailingListFromPresenti()" class="btn btn-sm btn-secondary text-white font-bold uppercase hidden">
+                            <i data-lucide="mail-plus" class="w-4 h-4"></i> Crea Mailing List
+                        </button>
                     </div>
                 </div>
 
@@ -374,6 +380,7 @@
             setModalReadOnly(false); // Modal modificabile
 
             document.getElementById('btn-delete').classList.add('hidden');
+            document.getElementById('btn-create-maillist').classList.add('hidden');
             document.getElementById('add-partecipante-area').classList.add('hidden'); // Nascosto in creazione
             document.getElementById('presentiTableBody').innerHTML = `<tr><td colspan="5" class="text-center italic text-xs py-4">Salva l'evento prima di aggiungere i presenti.</td></tr>`;
             
@@ -402,11 +409,13 @@
                 document.getElementById('add-partecipante-area').classList.remove('hidden');
                 document.getElementById('btn-delete').classList.remove('hidden');
                 document.getElementById('btn-save').classList.remove('hidden');
+                document.getElementById('btn-create-maillist').classList.remove('hidden');
             } else {
                 setModalReadOnly(true);
                 document.getElementById('add-partecipante-area').classList.add('hidden');
                 document.getElementById('btn-delete').classList.add('hidden');
                 document.getElementById('btn-save').classList.add('hidden');
+                document.getElementById('btn-create-maillist').classList.add('hidden');
             }
             
             loadPresenti(id);
@@ -552,6 +561,44 @@
                 const res = await fetch(`/api/agora/presenti/${idRiga}`, { method: 'DELETE' });
                 if(res.ok) loadPresenti(document.getElementById('ago-id').value);
             } catch(e) { console.error(e); }
+        }
+
+        async function handleCreateMailingListFromPresenti() {
+            if(!isAdminUser) return;
+
+            const idRiunione = document.getElementById('ago-id').value;
+            if(!idRiunione) return alert("Prima salva l'evento.");
+
+            if(!confirm("Creare una mailing list con i partecipanti registrati in questo evento?")) return;
+
+            const btn = document.getElementById('btn-create-maillist');
+            const oldText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = 'Creazione...';
+
+            try {
+                const res = await fetch(`/api/agora/${idRiunione}/create-maillist`, { method: 'POST' });
+                const result = await res.json();
+                if(res.ok) {
+                    let msg = `Mailing list ${result.isNew ? 'creata' : 'aggiornata'}: ${result.descrizione}\n\nPartecipanti:\n${result.presentiNomi.join('\n')}\n\nMail inserite: ${result.inserted}`;
+                    
+                    if(result.noMailList.length > 0) {
+                        msg += `\n\n⚠️ Partecipanti SENZA MAIL:\n${result.noMailList.join('\n')}`;
+                    }
+                    
+                    alert(msg);
+                    window.location.href = '/gestione_mailinglist';
+                } else {
+                    alert(result.error || 'Errore creazione mailing list');
+                }
+            } catch(e) {
+                console.error(e);
+                alert('Errore di comunicazione con il server');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = oldText;
+                if(window.lucide) lucide.createIcons();
+            }
         }
 
         async function handleSave() {

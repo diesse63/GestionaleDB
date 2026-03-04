@@ -45,7 +45,9 @@ const DB_FILENAME = 'database.db';
 const DB_LOCKED_NAME = 'database.db.LOCKED';
 const LOCK_INFO_FILE = 'session.lock';
 const BACKUP_DIR_NAME = 'backups_db';
-const MAX_BACKUPS = 5;
+const MAX_BACKUPS = 5;          // Regola: Ultimi 5 file per i Backup
+const MAX_PDF_TEMP = 5;         // Regola: Ultimi 5 file per i PDF
+const EXCEL_TTL_MS = 5 * 60 * 1000; // Regola: Excel durano 5 minuti
 
 // Root Dir
 const rootDir = (typeof process.pkg !== 'undefined') ? path.dirname(process.execPath) : __dirname;
@@ -61,11 +63,6 @@ const verbaliDir = path.join(uploadDir, 'verbali');
 const documentiDir = path.join(uploadDir, 'documenti');
 const tempDir = path.join(uploadDir, 'temp');
 
-// Cartelle Report
-const reportDir = path.join(rootDir, 'Report');
-const reportExcelDir = path.join(reportDir, 'Excel');
-const reportPdfDir = path.join(reportDir, 'DocumentiPDF');
-
 const MY_HOSTNAME = os.hostname();
 let db = null;
 let dbIsLockedByMe = false;
@@ -77,13 +74,111 @@ try {
     if (!fs.existsSync(verbaliDir)) fs.mkdirSync(verbaliDir);
     if (!fs.existsSync(documentiDir)) fs.mkdirSync(documentiDir);
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
-    if (!fs.existsSync(reportDir)) fs.mkdirSync(reportDir);
-    if (!fs.existsSync(reportExcelDir)) fs.mkdirSync(reportExcelDir);
-    if (!fs.existsSync(reportPdfDir)) fs.mkdirSync(reportPdfDir);
 } catch (err) { console.error("Errore cartelle:", err.message); }
 
 // ============================================================================
-// 2. MOTORE DI SICUREZZA (BACKUP & LOCK)
+// 2. SISTEMA DI PULIZIA AVANZATO (NETTURBINO)
+// ============================================================================
+
+function manutenzioneCartellaTemp() {
+    // Questa funzione viene chiamata ogni minuto per controllare la cartella temp
+    try {
+        if (!fs.existsSync(tempDir)) return;
+
+        const allFiles = fs.readdirSync(tempDir).map(file => {
+            return {
+                name: file,
+                path: path.join(tempDir, file),
+                time: fs.statSync(path.join(tempDir, file)).mtime.getTime(),
+                ext: path.extname(file).toLowerCase()
+            };
+        });
+
+        // 1. GESTIONE EXCEL (.xlsx) -> Cancella se più vecchi di 5 minuti
+        const now = Date.now();
+        const excelFiles = allFiles.filter(f => f.ext === '.xlsx');
+        
+        excelFiles.forEach(f => {
+            if ((now - f.time) > EXCEL_TTL_MS) {
+                try {
+                    fs.unlinkSync(f.path);
+                    console.log(`> Pulizia: Eliminato Excel scaduto ${f.name}`);
+                } catch(e) {}
+            }
+        });
+
+        // 2. GESTIONE PDF (.pdf) -> Tieni solo gli ultimi 5 (Quantità)
+        const pdfFiles = allFiles.filter(f => f.ext === '.pdf');
+        
+        // Ordina dal più recente al più vecchio
+        pdfFiles.sort((a, b) => b.time - a.time);
+
+        if (pdfFiles.length > MAX_PDF_TEMP) {
+            // Prendi quelli che eccedono il limite (dall'indice 5 in poi)
+            const daCancellare = pdfFiles.slice(MAX_PDF_TEMP);
+            daCancellare.forEach(f => {
+                try {
+                    fs.unlinkSync(f.path);
+                    console.log(`> Pulizia: Eliminato PDF vecchio (limite 5) ${f.name}`);
+                } catch(e) {}
+            });
+        }
+
+    } catch (e) {
+        console.error("> Errore manutenzione temp:", e.message);
+    }
+}
+
+// Avvia il ciclo di pulizia ogni 60 secondi
+setInterval(manutenzioneCartellaTemp, 60000);
+// Esegui una volta all'avvio
+manutenzioneCartellaTemp();
+
+
+function deletePhysicalFile(relPath) {
+    if(!relPath) return;
+    const cleanRel = relPath.replace(/^(\/|\\)/, '').replace(/^(archivio_files[\/\\])/, '');
+    const fullPath = path.join(uploadDir, cleanRel.replace('verbali/', 'verbali\\').replace('documenti/', 'documenti\\'));
+    const fullPathB = path.join(rootDir, relPath.replace(/^\//, ''));
+    if(fs.existsSync(fullPath)) try{fs.unlinkSync(fullPath);}catch(e){}
+    else if(fs.existsSync(fullPathB)) try{fs.unlinkSync(fullPathB);}catch(e){}
+}
+
+function sanitizeFilePart(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .replace(/_+/g, '_')
+        .slice(0, 80) || 'doc';
+}
+
+function buildDocumentBaseName(nome, tipologiaLabel, tipoLabel) {
+    const n = sanitizeFilePart(nome);
+    const t = sanitizeFilePart(tipologiaLabel);
+    const tp = sanitizeFilePart(tipoLabel);
+    return `${n}_${t}_${tp}`;
+}
+
+function makeUniqueDocumentFilename(baseName, ext = '.pdf') {
+    let candidate = `${baseName}${ext}`;
+    let i = 2;
+    while (fs.existsSync(path.join(documentiDir, candidate))) {
+        candidate = `${baseName}_${i}${ext}`;
+        i += 1;
+    }
+    return candidate;
+}
+
+function resolveAbsoluteFromDocumentLink(relPath) {
+    if (!relPath) return null;
+    const fileName = path.basename(String(relPath));
+    return path.join(documentiDir, fileName);
+}
+
+// ============================================================================
+// 3. MOTORE DI SICUREZZA (BACKUP DB & LOCK)
 // ============================================================================
 
 function eseguiBackup(sourcePath) {
@@ -97,6 +192,7 @@ function eseguiBackup(sourcePath) {
         console.log(`> Backup automatico: ${destName}`);
         fs.copyFileSync(sourcePath, destPath);
 
+        // Rotazione Backup DB (Tiene ultimi 5)
         const files = fs.readdirSync(pathBackupDir)
             .filter(f => f.endsWith('.bak'))
             .map(f => ({ name: f, path: path.join(pathBackupDir, f), time: fs.statSync(path.join(pathBackupDir, f)).mtime.getTime() }))
@@ -105,22 +201,11 @@ function eseguiBackup(sourcePath) {
         if (files.length > MAX_BACKUPS) {
             files.slice(MAX_BACKUPS).forEach(f => { try{fs.unlinkSync(f.path)}catch(e){} });
         }
-    } catch (error) { console.error("> Warning Backup:", error.message); 
-        
-    }}
+    } catch (error) { console.error("> Warning Backup:", error.message); }
+}
 
-
-   function scriviLockInfo() {
-    try { 
-        const now = Date.now(); 
-        fs.writeFileSync(pathLockInfo, JSON.stringify({ 
-            user: MY_HOSTNAME, 
-            timestamp: now,
-            data_leggibile: new Date(now).toLocaleString() 
-        }, null, 2)); 
-    } catch (e) {
-        console.error("ERRORE CRITICO SCRITTURA LOCK:", e.message);
-    }
+function scriviLockInfo() {
+    try { fs.writeFileSync(pathLockInfo, JSON.stringify({ user: MY_HOSTNAME, timestamp: Date.now() })); } catch (e) {}
 }
 
 function leggiLockInfo() {
@@ -130,9 +215,6 @@ function leggiLockInfo() {
 
 function avviaDatabaseInEsclusiva() {
     console.log(`\n--- AVVIO SISTEMA (${MY_HOSTNAME}) ---`);
-    
-    // Timeout di tolleranza
-    const LOCK_TIMEOUT_MS = 120000; 
 
     if (fs.existsSync(pathDbLibero)) {
         try {
@@ -147,27 +229,13 @@ function avviaDatabaseInEsclusiva() {
         }
     } else if (fs.existsSync(pathDbOccupato)) {
         const info = leggiLockInfo();
-        const now = Date.now();
-        
-        // CASO 1: Sono io
         if (info && info.user === MY_HOSTNAME) {
-            console.log("> Rilevato crash precedente (stesso PC). Ripristino sessione.");
+            console.log("> Rilevato crash precedente. Ripristino sessione.");
             scriviLockInfo();
             dbIsLockedByMe = true;
-        } 
-        // CASO 2: Lock scaduto
-        else if (info && (now - info.timestamp > LOCK_TIMEOUT_MS)) {
-            console.log(`> ATTENZIONE: Lock di ${info.user} scaduto (${(now - info.timestamp)/1000}s fa).`);
-            console.log("> ASSUMO IL CONTROLLO (Recovery).");
-            scriviLockInfo(); 
-            dbIsLockedByMe = true;
-        }
-        // CASO 3: Lock attivo di qualcun altro
-        else {
+        } else {
             const chi = info ? info.user : "Sconosciuto";
-            console.log(`\n!!! ACCESSO NEGATO !!!`);
-            console.log(`Database in uso da: ${chi}`);
-            console.log(`Se l'altro PC è spento, attendi 2 minuti e riprova.`);
+            console.log(`\n!!! ACCESSO NEGATO !!! Database in uso da: ${chi}`);
             return null;
         }
     } else {
@@ -178,33 +246,166 @@ function avviaDatabaseInEsclusiva() {
 
     try {
         const database = new Database(pathDbOccupato);
-        database.pragma('journal_mode = DELETE'); 
+        database.pragma('journal_mode = DELETE');
         database.pragma('foreign_keys = ON');
 
-        // STRUTTURA TABELLE
+        console.log("> Verifica integrità schema tabelle...");
+        
+        // --- STRUTTURA TABELLE ---
         database.exec(`
-            CREATE TABLE IF NOT EXISTS Utenti (ID INTEGER PRIMARY KEY AUTOINCREMENT, Email TEXT UNIQUE, Password TEXT, Nome TEXT, Amministratore INTEGER DEFAULT 0);
-            CREATE TABLE IF NOT EXISTS Tipologia (ID INTEGER PRIMARY KEY AUTOINCREMENT, Tipologia TEXT);
-            CREATE TABLE IF NOT EXISTS Associazioni (ID INTEGER PRIMARY KEY AUTOINCREMENT, ID_TIPOLOGIA INTEGER, SOGGETTO TEXT, TAVOLO INTEGER DEFAULT 0, DIRETTIVO_DELEGAZIONE INTEGER DEFAULT 0, CODICEFISCALE TEXT, FOREIGN KEY(ID_TIPOLOGIA) REFERENCES Tipologia(ID));
-            CREATE TABLE IF NOT EXISTS Mail (ID INTEGER PRIMARY KEY AUTOINCREMENT, IDAssociazione INTEGER, Indirizzo TEXT, PEC INTEGER DEFAULT 0, Predefinito INTEGER DEFAULT 0, FOREIGN KEY(IDAssociazione) REFERENCES Associazioni(ID) ON DELETE CASCADE);
-            CREATE TABLE IF NOT EXISTS Telefono (ID INTEGER PRIMARY KEY AUTOINCREMENT, IDAssociazione INTEGER, Telefono TEXT, Predefinito INTEGER DEFAULT 0, FOREIGN KEY(IDAssociazione) REFERENCES Associazioni(ID) ON DELETE CASCADE);
-            CREATE TABLE IF NOT EXISTS Referenti (ID INTEGER PRIMARY KEY AUTOINCREMENT, ID_Associazione INTEGER, Nome TEXT, MAILREFERENTE TEXT, FOREIGN KEY(ID_Associazione) REFERENCES Associazioni(ID) ON DELETE CASCADE);
-            CREATE TABLE IF NOT EXISTS AltriSoggetti (ID INTEGER PRIMARY KEY AUTOINCREMENT, ID_Associazione INTEGER, Nome TEXT, MAILALTRISOGGETTI TEXT, FOREIGN KEY(ID_Associazione) REFERENCES Associazioni(ID) ON DELETE CASCADE);
-            CREATE TABLE IF NOT EXISTS Runts (CodiceFiscale TEXT PRIMARY KEY, Denominazione TEXT, Cognome TEXT, Nome TEXT, IDAssociazione INTEGER, Provincia TEXT);
-            CREATE TABLE IF NOT EXISTS CesvotMail (Mail TEXT);
-            CREATE TABLE IF NOT EXISTS CesvotTelefono (Telefono TEXT);
-            CREATE TABLE IF NOT EXISTS AgoraTipoEvento (ID INTEGER PRIMARY KEY AUTOINCREMENT, IntestazionePagina TEXT);
-            CREATE TABLE IF NOT EXISTS Agora (ID INTEGER PRIMARY KEY AUTOINCREMENT, Data TEXT, Evento TEXT, ODG TEXT, Verbale TEXT, Documenti TEXT, IDTipoEvento INTEGER DEFAULT 1, FOREIGN KEY(IDTipoEvento) REFERENCES AgoraTipoEvento(ID));
-            CREATE TABLE IF NOT EXISTS AgoraPresenti (ID INTEGER PRIMARY KEY AUTOINCREMENT, IDRiunioni INTEGER, IDAssociazione INTEGER, Rappresentante TEXT, FOREIGN KEY(IDRiunioni) REFERENCES Agora(ID) ON DELETE CASCADE, FOREIGN KEY(IDAssociazione) REFERENCES Associazioni(ID) ON DELETE CASCADE);
-            CREATE TABLE IF NOT EXISTS MailList (ID INTEGER PRIMARY KEY AUTOINCREMENT, Descrizione TEXT, Note TEXT);
-            CREATE TABLE IF NOT EXISTS ListaMail (ID INTEGER PRIMARY KEY AUTOINCREMENT, IDListaMail INTEGER, IDMail INTEGER, TipoInvio TEXT DEFAULT 'CCN', FOREIGN KEY(IDListaMail) REFERENCES MailList(ID) ON DELETE CASCADE, FOREIGN KEY(IDMail) REFERENCES Mail(ID) ON DELETE CASCADE, UNIQUE(IDListaMail, IDMail));
-            CREATE TABLE IF NOT EXISTS Report (ID INTEGER PRIMARY KEY AUTOINCREMENT, Password TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS "Utenti" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "Nome" TEXT,
+                "Email" TEXT UNIQUE,
+                "Password" TEXT,
+                "Amministratore" INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS "Tipologia" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "Tipologia" TEXT NOT NULL UNIQUE
+            );
+            CREATE TABLE IF NOT EXISTS "Associazioni" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "ID_TIPOLOGIA" INTEGER NOT NULL,
+                "COLONNA3" TEXT,
+                "TAVOLO" INTEGER NOT NULL DEFAULT 0 CHECK("TAVOLO" IN (0, 1)),
+                "DIRETTIVO_DELEGAZIONE" INTEGER NOT NULL DEFAULT 0 CHECK("DIRETTIVO_DELEGAZIONE" IN (0, 1)),
+                "SOGGETTO" TEXT NOT NULL UNIQUE,
+                "CODICEFISCALE" TEXT,
+                FOREIGN KEY("ID_TIPOLOGIA") REFERENCES "Tipologia"("ID") ON UPDATE CASCADE ON DELETE RESTRICT
+            );
+            CREATE TABLE IF NOT EXISTS "Referenti" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "ID_Associazione" INTEGER NOT NULL,
+                "Nome" TEXT NOT NULL,
+                "MAILREFERENTE" TEXT,
+                FOREIGN KEY("ID_Associazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
+                UNIQUE("ID_Associazione","Nome")
+            );
+            CREATE TABLE IF NOT EXISTS "AltriSoggetti" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "ID_Associazione" INTEGER NOT NULL,
+                "Nome" TEXT NOT NULL,
+                "MAILALTRISOGGETTI" TEXT,
+                FOREIGN KEY("ID_Associazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
+                UNIQUE("ID_Associazione","Nome")
+            );
+            CREATE TABLE IF NOT EXISTS "Mail" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "IDAssociazione" INTEGER NOT NULL,
+                "Indirizzo" TEXT NOT NULL,
+                "PEC" INTEGER DEFAULT 0 CHECK("PEC" IN (0, 1)),
+                "Predefinito" INTEGER DEFAULT 0 CHECK("Predefinito" IN (0, 1)),
+                FOREIGN KEY("IDAssociazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
+                UNIQUE("IDAssociazione","Indirizzo")
+            );
+            CREATE TABLE IF NOT EXISTS "Telefono" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "IDAssociazione" INTEGER NOT NULL,
+                "Telefono" TEXT NOT NULL,
+                "Predefinito" INTEGER DEFAULT 0,
+                FOREIGN KEY("IDAssociazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
+                UNIQUE("IDAssociazione","Telefono")
+            );
+            CREATE TABLE IF NOT EXISTS "Runts" (
+                "CodiceFiscale" TEXT UNIQUE,
+                "Denominazione" TEXT,
+                "Cognome" TEXT,
+                "Nome" TEXT,
+                "IDAssociazione" INTEGER,
+                "Provincia" TEXT,
+                PRIMARY KEY("CodiceFiscale")
+            );
+            CREATE TABLE IF NOT EXISTS "CesvotTelefono" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "Denominazione" TEXT,
+                "Telefono" TEXT,
+                UNIQUE("Denominazione","Telefono")
+            );
+            CREATE TABLE IF NOT EXISTS "CesvotMail" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "Denominazione" TEXT,
+                "Mail" TEXT,
+                UNIQUE("Denominazione","Mail")
+            );
+            CREATE TABLE IF NOT EXISTS "Temporanea" (
+                "SOGGETTO" TEXT,
+                "MAIL" TEXT
+            );
+            CREATE TABLE IF NOT EXISTS "MailList" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "Descrizione" TEXT NOT NULL UNIQUE,
+                "Note" TEXT
+            );
+            CREATE TABLE IF NOT EXISTS "ListaMail" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "IDListaMail" INTEGER NOT NULL,
+                "IDMail" INTEGER NOT NULL,
+                "TipoInvio" TEXT DEFAULT 'CCN',
+                FOREIGN KEY("IDListaMail") REFERENCES "MailList"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY("IDMail") REFERENCES "Mail"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
+                UNIQUE("IDListaMail","IDMail")
+            );
+            CREATE TABLE IF NOT EXISTS "AgoraTipoEvento" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "IntestazionePagina" TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS "Agora" (
+                "ID" INTEGER NOT NULL PRIMARY KEY,
+                "Data" TEXT NOT NULL,
+                "Evento" TEXT,
+                "ODG" TEXT,
+                "Verbale" TEXT,
+                "Documenti" TEXT,
+                "IDTipoEvento" INTEGER NOT NULL,
+                FOREIGN KEY("IDTipoEvento") REFERENCES "AgoraTipoEvento"("ID") ON DELETE RESTRICT
+            );
+            CREATE TABLE IF NOT EXISTS "AgoraPresenti" (
+                "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+                "IDRiunioni" INTEGER NOT NULL,
+                "IDAssociazione" INTEGER NOT NULL,
+                "Rappresentante" TEXT,
+                FOREIGN KEY("IDAssociazione") REFERENCES "Associazioni"("ID") ON UPDATE CASCADE ON DELETE RESTRICT,
+                FOREIGN KEY("IDRiunioni") REFERENCES "Agora"("ID") ON UPDATE CASCADE ON DELETE CASCADE,
+                UNIQUE("IDRiunioni","IDAssociazione","Rappresentante")
+            );
+            CREATE TABLE IF NOT EXISTS "AgoraOld" (
+                "ID" INTEGER NOT NULL,
+                "Data" TEXT NOT NULL,
+                "Evento" TEXT,
+                "ODG" TEXT,
+                "Verbale" TEXT,
+                "Documenti" TEXT,
+                "IDTipoEvento" INTEGER NOT NULL,
+                PRIMARY KEY("ID")
+            );
+            CREATE TABLE IF NOT EXISTS "Report" (
+                "ID" INTEGER NOT NULL,
+                "Password" TEXT NOT NULL,
+                PRIMARY KEY("ID" AUTOINCREMENT)
+            );
+            CREATE TABLE IF NOT EXISTS "DocumentoTipo" (
+                "ID" INTEGER NOT NULL,
+                "Tipo" INTEGER NOT NULL UNIQUE,
+                PRIMARY KEY("ID" AUTOINCREMENT)
+            );
+            CREATE TABLE IF NOT EXISTS "Documento" (
+                "ID" INTEGER,
+                "IDTipologia" INTEGER NOT NULL,
+                "IDTipo" INTEGER NOT NULL,
+                "Nome" TEXT NOT NULL,
+                "Link" TEXT NOT NULL,
+                "Note" TEXT,
+                FOREIGN KEY("IDTipo") REFERENCES "DocumentoTipo"("ID") ON UPDATE CASCADE ON DELETE RESTRICT,
+                FOREIGN KEY("IDTipologia") REFERENCES "Tipologia"("ID") ON UPDATE CASCADE ON DELETE RESTRICT,
+                PRIMARY KEY("ID" AUTOINCREMENT)
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "idx_documento_univoco" ON "Documento"(
+                "Nome",
+                "IDTipologia",
+                "IDTipo"
+            );
         `);
-
-        const reportColumns = database.prepare("PRAGMA table_info(Report)").all().map(r => r.name);
-        if (!reportColumns.includes('Password')) {
-            database.exec("ALTER TABLE Report ADD COLUMN Password TEXT NOT NULL DEFAULT ''");
-        }
 
         // Seed
         if(database.prepare("SELECT COUNT(*) as c FROM Tipologia").get().c === 0) {
@@ -212,9 +413,6 @@ function avviaDatabaseInEsclusiva() {
         }
         if(database.prepare("SELECT COUNT(*) as c FROM AgoraTipoEvento").get().c === 0) {
             database.prepare("INSERT INTO AgoraTipoEvento (IntestazionePagina) VALUES (?)").run('Tavolo Agorà');
-        }
-        if(database.prepare("SELECT COUNT(*) as c FROM Report").get().c === 0) {
-            database.prepare("INSERT INTO Report (Password) VALUES (?)").run('');
         }
 
         console.log("> Database connesso.");
@@ -237,7 +435,7 @@ function chiudiTutto() {
 }
 
 // ============================================================================
-// 3. EXPRESS APP
+// 4. EXPRESS APP
 // ============================================================================
 
 const app = express();
@@ -257,100 +455,6 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 const uploadFields = upload.fields([{ name: 'verbale' }, { name: 'documenti' }, { name: 'fileRunts' }]);
-
-const deletePhysicalFile = (relPath) => {
-    if(!relPath) return;
-    const cleanRel = relPath.replace(/^(\/|\\)/, '').replace(/^(archivio_files[\/\\])/, '');
-    const fullPath = path.join(uploadDir, cleanRel.replace('verbali/', 'verbali\\').replace('documenti/', 'documenti\\'));
-    const fullPathB = path.join(rootDir, relPath.replace(/^\//, ''));
-    if(fs.existsSync(fullPath)) try{fs.unlinkSync(fullPath);}catch(e){}
-    else if(fs.existsSync(fullPathB)) try{fs.unlinkSync(fullPathB);}catch(e){}
-};
-
-const isLikelyUrl = (value) => typeof value === 'string' && /^https?:\/\//i.test(value.trim());
-
-const clearDirectory = (dirPath) => {
-    if (!dirPath || path.parse(dirPath).root === dirPath) {
-        throw new Error('Percorso non valido per la pulizia');
-    }
-    if (!fs.existsSync(dirPath)) return;
-    fs.readdirSync(dirPath, { withFileTypes: true }).forEach((entry) => {
-        const full = path.join(dirPath, entry.name);
-        if (entry.isDirectory()) fs.rmSync(full, { recursive: true, force: true });
-        else fs.unlinkSync(full);
-    });
-};
-
-const copyDirectory = (src, dest) => {
-    if (!fs.existsSync(src)) return;
-    fs.mkdirSync(dest, { recursive: true });
-    fs.readdirSync(src, { withFileTypes: true }).forEach((entry) => {
-        const srcPath = path.join(src, entry.name);
-        const destPath = path.join(dest, entry.name);
-        if (entry.isDirectory()) copyDirectory(srcPath, destPath);
-        else fs.copyFileSync(srcPath, destPath);
-    });
-};
-
-const getUniqueDestPath = (destDir, fileName) => {
-    const parsed = path.parse(fileName);
-    let candidate = path.join(destDir, fileName);
-    let counter = 1;
-    while (fs.existsSync(candidate)) {
-        const nextName = `${parsed.name}_${counter}${parsed.ext}`;
-        candidate = path.join(destDir, nextName);
-        counter += 1;
-    }
-    return candidate;
-};
-
-const copyFlatFiles = (src, dest) => {
-    if (!fs.existsSync(src)) return;
-    fs.mkdirSync(dest, { recursive: true });
-    
-    fs.readdirSync(src, { withFileTypes: true }).forEach((entry) => {
-        const srcPath = path.join(src, entry.name);
-        
-        // Ricorsione nelle sottocartelle
-        if (entry.isDirectory()) {
-            copyFlatFiles(srcPath, dest);
-            return;
-        }
-        
-        // Copia SOLO i file PDF
-        if (!entry.name.toLowerCase().endsWith('.pdf')) {
-            return;
-        }
-        
-        // Verifica che il file esista effettivamente
-        if (!fs.existsSync(srcPath)) {
-            console.warn(`[REPORT] File PDF non trovato, ignorato: ${srcPath}`);
-            return;
-        }
-        
-        try {
-            const destPath = getUniqueDestPath(dest, entry.name);
-            fs.copyFileSync(srcPath, destPath);
-            console.log(`[REPORT] PDF copiato: ${entry.name}`);
-        } catch (err) {
-            console.warn(`[REPORT] Impossibile copiare PDF ${srcPath}: ${err.message}`);
-        }
-    });
-};
-
-const stripReportFilePath = (value) => {
-    if (!value || typeof value !== 'string') return value;
-    return path.basename(value);
-};
-
-const normalizeReportRow = (row) => {
-    if (!row || typeof row !== 'object') return row;
-    const normalized = { ...row };
-    ['Verbale', 'Documenti'].forEach((key) => {
-        if (normalized[key]) normalized[key] = stripReportFilePath(normalized[key]);
-    });
-    return normalized;
-};
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -374,17 +478,17 @@ app.get('/', (req, res) => { if (!req.session.userId) return res.redirect('/logi
 
 app.get('/servizi.html', (req, res) => res.redirect('/dashboard_servizi'));
 
-['agora','gestione_associazioni','gestione_referenti','gestione_altri','anagrafica_singola','gestione_mailinglist','dashboard_servizi','gestione_utenti','anagrafica','agora_tipo_eventi'].forEach(p => {
+['agora','gestione_associazioni','gestione_referenti','gestione_altri','anagrafica_singola','gestione_mailinglist','dashboard_servizi','gestione_utenti','anagrafica','agora_tipo_eventi','documento_tipi','gestione_documentale'].forEach(p => {
     app.get(`/${p}`, (req, res) => {
         if(!req.session.userId) return res.redirect('/login.html');
-        if(['dashboard_servizi','gestione_utenti','anagrafica','agora_tipo_eventi'].includes(p) && req.session.isAdmin !== 1) return res.redirect('/');
+        if(['dashboard_servizi','gestione_utenti','anagrafica','agora_tipo_eventi','documento_tipi'].includes(p) && req.session.isAdmin !== 1) return res.redirect('/');
         res.sendFile(path.join(publicPath, p === 'agora' ? 'registro_agora.html' : `${p}.html`));
     });
     app.get(`/${p}.html`, (req, res) => res.redirect(`/${p}`));
 });
 
 // ============================================================================
-// 4. API ENDPOINTS
+// 5. API ENDPOINTS
 // ============================================================================
 
 db = avviaDatabaseInEsclusiva();
@@ -393,11 +497,6 @@ if (!db) {
     console.log("Premi CTRL+C per uscire...");
     setTimeout(() => process.exit(1), 20000);
 } else {
-
-    // --- HEARTBEAT ---
-    setInterval(() => {
-        if (dbIsLockedByMe) scriviLockInfo();
-    }, 60000);
 
     // Auth
     app.post('/api/login', (req, res) => {
@@ -410,45 +509,6 @@ if (!db) {
     });
     app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({success:true})));
     app.get('/api/me', checkAuth, (req, res) => res.json({logged:true, nome:req.session.userName, isAdmin:req.session.isAdmin===1}));
-
-    app.get('/api/report/settings', checkAuth, (req, res) => {
-        const row = db.prepare("SELECT ID, Password FROM Report ORDER BY ID ASC LIMIT 1").get();
-        if (!row) return res.status(404).json({ error: "Impostazioni report non trovate" });
-        res.json(row);
-    });
-    app.put('/api/report/settings', checkAuth, (req, res) => {
-        const payload = { Password: req.body.Password || '' };
-        const row = db.prepare("SELECT ID FROM Report ORDER BY ID ASC LIMIT 1").get();
-        if (!row) return res.status(404).json({ error: "Impostazioni report non trovate" });
-        db.prepare("UPDATE Report SET Password=? WHERE ID=?").run(
-            payload.Password,
-            row.ID
-        );
-        res.json({ success: true });
-    });
-
-    app.post('/api/report/open-folder', checkAuth, (req, res) => {
-        try {
-            const { exec } = require('child_process');
-            let cmd;
-            if (process.platform === 'win32') {
-                cmd = `explorer "${reportDir}"`;
-            } else if (process.platform === 'darwin') {
-                cmd = `open "${reportDir}"`;
-            } else {
-                cmd = `xdg-open "${reportDir}"`;
-            }
-            exec(cmd, (err) => {
-                if (err) {
-                    res.json({ success: false, error: err.message });
-                } else {
-                    res.json({ success: true });
-                }
-            });
-        } catch (e) {
-            res.status(500).json({ error: e.message });
-        }
-    });
 
     // MASTER DATA
     app.get('/api/associazioni', checkAuth, (req, res) => res.json(db.prepare("SELECT a.*, t.Tipologia as Tipologia_Nome FROM Associazioni a LEFT JOIN Tipologia t ON a.ID_TIPOLOGIA = t.ID ORDER BY a.SOGGETTO").all()));
@@ -477,8 +537,7 @@ if (!db) {
     });
     app.delete('/api/telefono/:id', checkAuth, checkAdmin, (req, res) => { try{db.prepare("DELETE FROM Telefono WHERE ID=?").run(req.params.id);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
 
-    // --- REFERENTI & ALTRI ---
-    
+    // REFERENTI & ALTRI
     const getAllReferenti = () => db.prepare("SELECT r.*, a.SOGGETTO FROM Referenti r LEFT JOIN Associazioni a ON r.ID_Associazione=a.ID ORDER BY r.Nome").all();
     const getAllAltri = () => db.prepare("SELECT s.*, a.SOGGETTO FROM AltriSoggetti s LEFT JOIN Associazioni a ON s.ID_Associazione=a.ID ORDER BY s.Nome").all();
 
@@ -486,14 +545,9 @@ if (!db) {
     app.get('/api/all-referenti', checkAuth, (req, res) => res.json(getAllReferenti()));
 
     app.post('/api/referenti', checkAuth, checkAdmin, (req, res) => { try{db.prepare("INSERT INTO Referenti(ID_Associazione,Nome,MAILREFERENTE) VALUES(?,?,?)").run(req.body.ID_Associazione,req.body.Nome,req.body.MAILREFERENTE);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
-    
     app.put('/api/referenti/:id', checkAuth, checkAdmin, (req, res) => {
-        try {
-            db.prepare("UPDATE Referenti SET ID_Associazione=?, Nome=?, MAILREFERENTE=? WHERE ID=?").run(req.body.ID_Associazione, req.body.Nome, req.body.MAILREFERENTE, req.params.id);
-            res.json({success:true});
-        } catch(e) { res.status(500).json({error:e.message}); }
+        try { db.prepare("UPDATE Referenti SET ID_Associazione=?, Nome=?, MAILREFERENTE=? WHERE ID=?").run(req.body.ID_Associazione, req.body.Nome, req.body.MAILREFERENTE, req.params.id); res.json({success:true}); } catch(e) { res.status(500).json({error:e.message}); }
     });
-
     app.delete('/api/referenti/:id', checkAuth, checkAdmin, (req, res) => { try{db.prepare("DELETE FROM Referenti WHERE ID=?").run(req.params.id);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
 
     app.get('/api/altrisoggetti', checkAuth, (req, res) => res.json(getAllAltri()));
@@ -501,21 +555,9 @@ if (!db) {
     app.get('/api/all-altri', checkAuth, (req, res) => res.json(getAllAltri()));        
 
     app.post('/api/altri-soggetti', checkAuth, checkAdmin, (req, res) => { try{db.prepare("INSERT INTO AltriSoggetti(ID_Associazione,Nome,MAILALTRISOGGETTI) VALUES(?,?,?)").run(req.body.ID_Associazione,req.body.Nome,req.body.MAILALTRISOGGETTI);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
-    
     app.put('/api/altri-soggetti/:id', checkAuth, checkAdmin, (req, res) => {
-        try {
-            db.prepare("UPDATE AltriSoggetti SET ID_Associazione=?, Nome=?, MAILALTRISOGGETTI=? WHERE ID=?").run(req.body.ID_Associazione, req.body.Nome, req.body.MAILALTRISOGGETTI, req.params.id);
-            res.json({success:true});
-        } catch(e) { res.status(500).json({error:e.message}); }
+        try { db.prepare("UPDATE AltriSoggetti SET ID_Associazione=?, Nome=?, MAILALTRISOGGETTI=? WHERE ID=?").run(req.body.ID_Associazione, req.body.Nome, req.body.MAILALTRISOGGETTI, req.params.id); res.json({success:true}); } catch(e) { res.status(500).json({error:e.message}); }
     });
-    // Alias
-    app.put('/api/altrisoggetti/:id', checkAuth, checkAdmin, (req, res) => {
-        try {
-            db.prepare("UPDATE AltriSoggetti SET ID_Associazione=?, Nome=?, MAILALTRISOGGETTI=? WHERE ID=?").run(req.body.ID_Associazione, req.body.Nome, req.body.MAILALTRISOGGETTI, req.params.id);
-            res.json({success:true});
-        } catch(e) { res.status(500).json({error:e.message}); }
-    });
-
     app.delete('/api/altri-soggetti/:id', checkAuth, checkAdmin, (req, res) => { try{db.prepare("DELETE FROM AltriSoggetti WHERE ID=?").run(req.params.id);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
 
     app.get('/api/persone/tutti', checkAuth, (req, res) => res.json(db.prepare(`SELECT r.Nome, 'Referente' as Tipo, r.ID_Associazione, a.SOGGETTO FROM Referenti r JOIN Associazioni a ON r.ID_Associazione = a.ID UNION ALL SELECT s.Nome, 'Altro Soggetto' as Tipo, s.ID_Associazione, a.SOGGETTO FROM AltriSoggetti s JOIN Associazioni a ON s.ID_Associazione = a.ID ORDER BY SOGGETTO ASC, Nome ASC`).all()));
@@ -548,6 +590,197 @@ if (!db) {
     app.put('/api/agora-tipi/:id', checkAuth, checkAdmin, (req, res) => { try{db.prepare("UPDATE AgoraTipoEvento SET IntestazionePagina=? WHERE ID=?").run(req.body.IntestazionePagina, req.params.id);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
     app.post('/api/agora-tipi', checkAuth, checkAdmin, (req, res) => { try{db.prepare("INSERT INTO AgoraTipoEvento(IntestazionePagina) VALUES(?)").run(req.body.IntestazionePagina);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
     app.delete('/api/agora-tipi/:id', checkAuth, checkAdmin, (req, res) => { try{db.prepare("DELETE FROM AgoraTipoEvento WHERE ID=?").run(req.params.id);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
+
+    app.get('/api/documenti-tipi', checkAuth, (req, res) => res.json(db.prepare("SELECT ID, Tipo FROM DocumentoTipo ORDER BY Tipo").all()));
+    app.post('/api/documenti-tipi', checkAuth, checkAdmin, (req, res) => {
+        try {
+            const tipo = String(req.body.Tipo ?? '').trim();
+            if (!tipo) return res.status(400).json({ error: 'Tipo non valido' });
+            db.prepare("INSERT INTO DocumentoTipo(Tipo) VALUES(?)").run(tipo);
+            res.json({ success: true });
+        } catch (e) {
+            if (String(e.message || '').includes('UNIQUE constraint failed: DocumentoTipo.Tipo')) {
+                return res.status(409).json({ error: 'Tipologia già esistente' });
+            }
+            res.status(500).json({ error: e.message });
+        }
+    });
+    app.put('/api/documenti-tipi/:id', checkAuth, checkAdmin, (req, res) => {
+        try {
+            const tipo = String(req.body.Tipo ?? '').trim();
+            if (!tipo) return res.status(400).json({ error: 'Tipo non valido' });
+            db.prepare("UPDATE DocumentoTipo SET Tipo=? WHERE ID=?").run(tipo, req.params.id);
+            res.json({ success: true });
+        } catch (e) {
+            if (String(e.message || '').includes('UNIQUE constraint failed: DocumentoTipo.Tipo')) {
+                return res.status(409).json({ error: 'Tipologia già esistente' });
+            }
+            res.status(500).json({ error: e.message });
+        }
+    });
+    app.delete('/api/documenti-tipi/:id', checkAuth, checkAdmin, (req, res) => {
+        try {
+            db.prepare("DELETE FROM DocumentoTipo WHERE ID=?").run(req.params.id);
+            res.json({ success: true });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.get('/api/documenti', checkAuth, (req, res) => {
+        try {
+            const rows = db.prepare(`
+                SELECT
+                    D.ID,
+                    D.IDTipologia,
+                    D.IDTipo,
+                    D.Nome,
+                    D.Link,
+                    D.Note,
+                    T.Tipologia,
+                    DT.Tipo
+                FROM Documento D
+                LEFT JOIN Tipologia T ON T.ID = D.IDTipologia
+                LEFT JOIN DocumentoTipo DT ON DT.ID = D.IDTipo
+                ORDER BY D.ID DESC
+            `).all();
+            res.json(rows);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/documenti', checkAuth, checkAdmin, uploadFields, (req, res) => {
+        try {
+            const idTipologia = Number(req.body.IDTipologia || 0);
+            const idTipo = Number(req.body.IDTipo || 0);
+            const nome = String(req.body.Nome || '').trim();
+            const note = String(req.body.Note || '').trim();
+            const fileDoc = req.files?.['documenti']?.[0];
+
+            if (!idTipologia || !idTipo || !nome) {
+                return res.status(400).json({ error: 'Campi obbligatori mancanti' });
+            }
+            if (!fileDoc) {
+                return res.status(400).json({ error: 'File documento obbligatorio' });
+            }
+
+            if (!/\.pdf$/i.test(String(fileDoc.originalname || ''))) {
+                deletePhysicalFile(`/archivio_files/documenti/${fileDoc.filename}`);
+                return res.status(400).json({ error: 'È consentito solo il formato PDF' });
+            }
+
+            const already = db.prepare("SELECT ID FROM Documento WHERE Nome=? AND IDTipologia=? AND IDTipo=?")
+                .get(nome, idTipologia, idTipo);
+            if (already) {
+                deletePhysicalFile(`/archivio_files/documenti/${fileDoc.filename}`);
+                return res.status(409).json({ error: 'Documento già presente con Nome, Tipologia e Tipo selezionati' });
+            }
+
+            const tipologiaRow = db.prepare("SELECT Tipologia FROM Tipologia WHERE ID=?").get(idTipologia);
+            const tipoRow = db.prepare("SELECT Tipo FROM DocumentoTipo WHERE ID=?").get(idTipo);
+            if (!tipologiaRow || !tipoRow) {
+                deletePhysicalFile(`/archivio_files/documenti/${fileDoc.filename}`);
+                return res.status(400).json({ error: 'Tipologia o Tipo documento non validi' });
+            }
+
+            const baseName = buildDocumentBaseName(nome, tipologiaRow.Tipologia, tipoRow.Tipo);
+            const finalFileName = makeUniqueDocumentFilename(baseName, '.pdf');
+            fs.renameSync(path.join(documentiDir, fileDoc.filename), path.join(documentiDir, finalFileName));
+
+            const link = `/archivio_files/documenti/${finalFileName}`;
+            const result = db.prepare("INSERT INTO Documento (IDTipologia, IDTipo, Nome, Link, Note) VALUES (?,?,?,?,?)")
+                .run(idTipologia, idTipo, nome, link, note);
+
+            res.json({ success: true, id: result.lastInsertRowid });
+        } catch (e) {
+            if (String(e.message || '').includes('UNIQUE constraint failed: Documento.Nome, Documento.IDTipologia, Documento.IDTipo')) {
+                return res.status(409).json({ error: 'Documento già presente con Nome, Tipologia e Tipo selezionati' });
+            }
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.put('/api/documenti/:id', checkAuth, checkAdmin, uploadFields, (req, res) => {
+        try {
+            const row = db.prepare("SELECT ID, IDTipologia, IDTipo, Nome, Link FROM Documento WHERE ID=?").get(req.params.id);
+            if (!row) return res.status(404).json({ error: 'Documento non trovato' });
+
+            const idTipologia = Number(req.body.IDTipologia || 0);
+            const idTipo = Number(req.body.IDTipo || 0);
+            const nome = String(req.body.Nome || '').trim();
+            const note = String(req.body.Note || '').trim();
+
+            if (!idTipologia || !idTipo || !nome) {
+                return res.status(400).json({ error: 'Campi obbligatori mancanti' });
+            }
+
+            const duplicate = db.prepare("SELECT ID FROM Documento WHERE Nome=? AND IDTipologia=? AND IDTipo=? AND ID<>?")
+                .get(nome, idTipologia, idTipo, req.params.id);
+            if (duplicate) {
+                const uploadedOnConflict = req.files?.['documenti']?.[0];
+                if (uploadedOnConflict) deletePhysicalFile(`/archivio_files/documenti/${uploadedOnConflict.filename}`);
+                return res.status(409).json({ error: 'Documento già presente con Nome, Tipologia e Tipo selezionati' });
+            }
+
+            const tipologiaRow = db.prepare("SELECT Tipologia FROM Tipologia WHERE ID=?").get(idTipologia);
+            const tipoRow = db.prepare("SELECT Tipo FROM DocumentoTipo WHERE ID=?").get(idTipo);
+            if (!tipologiaRow || !tipoRow) {
+                const uploadedInvalid = req.files?.['documenti']?.[0];
+                if (uploadedInvalid) deletePhysicalFile(`/archivio_files/documenti/${uploadedInvalid.filename}`);
+                return res.status(400).json({ error: 'Tipologia o Tipo documento non validi' });
+            }
+
+            let link = row.Link || '';
+            const fileDoc = req.files?.['documenti']?.[0];
+            const baseName = buildDocumentBaseName(nome, tipologiaRow.Tipologia, tipoRow.Tipo);
+            const currentAbs = resolveAbsoluteFromDocumentLink(link);
+
+            if (fileDoc) {
+                if (!/\.pdf$/i.test(String(fileDoc.originalname || ''))) {
+                    deletePhysicalFile(`/archivio_files/documenti/${fileDoc.filename}`);
+                    return res.status(400).json({ error: 'È consentito solo il formato PDF' });
+                }
+
+                deletePhysicalFile(link);
+                const finalFileName = makeUniqueDocumentFilename(baseName, '.pdf');
+                fs.renameSync(path.join(documentiDir, fileDoc.filename), path.join(documentiDir, finalFileName));
+                link = `/archivio_files/documenti/${finalFileName}`;
+            } else if (req.body.deleteDocumento === 'true') {
+                deletePhysicalFile(link);
+                link = '';
+            } else if (currentAbs && fs.existsSync(currentAbs)) {
+                const desiredFileName = `${baseName}.pdf`;
+                const currentName = path.basename(currentAbs);
+                if (currentName !== desiredFileName) {
+                    const finalFileName = makeUniqueDocumentFilename(baseName, '.pdf');
+                    fs.renameSync(currentAbs, path.join(documentiDir, finalFileName));
+                    link = `/archivio_files/documenti/${finalFileName}`;
+                }
+            }
+
+            db.prepare("UPDATE Documento SET IDTipologia=?, IDTipo=?, Nome=?, Link=?, Note=? WHERE ID=?")
+                .run(idTipologia, idTipo, nome, link, note, req.params.id);
+
+            res.json({ success: true });
+        } catch (e) {
+            if (String(e.message || '').includes('UNIQUE constraint failed: Documento.Nome, Documento.IDTipologia, Documento.IDTipo')) {
+                return res.status(409).json({ error: 'Documento già presente con Nome, Tipologia e Tipo selezionati' });
+            }
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.delete('/api/documenti/:id', checkAuth, checkAdmin, (req, res) => {
+        try {
+            const row = db.prepare("SELECT Link FROM Documento WHERE ID=?").get(req.params.id);
+            if (row?.Link) deletePhysicalFile(row.Link);
+            db.prepare("DELETE FROM Documento WHERE ID=?").run(req.params.id);
+            res.json({ success: true });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
 
     app.get('/api/agora', checkAuth, (req, res) => {
         try { res.json(db.prepare(req.query.tipo ? "SELECT * FROM Agora WHERE IDTipoEvento=? ORDER BY Data DESC" : "SELECT * FROM Agora ORDER BY Data DESC").all(req.query.tipo || [])); } catch(e){res.status(500).json({error:e.message});}
@@ -583,6 +816,97 @@ if (!db) {
         try { const r = db.prepare("INSERT OR IGNORE INTO AgoraPresenti (IDRiunioni,IDAssociazione,Rappresentante) VALUES(?,?,?)").run(req.body.IDRiunioni,req.body.IDAssociazione,req.body.Rappresentante); res.json({success:true, added:r.changes>0}); } catch(e){res.status(500).json({error:e.message});}
     });
     app.delete('/api/agora/presenti/:id', checkAuth, checkAdmin, (req, res) => { try{db.prepare("DELETE FROM AgoraPresenti WHERE ID=?").run(req.params.id);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
+    app.post('/api/agora/:id/create-maillist', checkAuth, checkAdmin, (req, res) => {
+        try {
+            const eventRow = db.prepare("SELECT ID, Data, Evento FROM Agora WHERE ID=?").get(req.params.id);
+            if(!eventRow) return res.status(404).json({error:"Evento non trovato"});
+
+            const baseDescr = `${eventRow.Evento || 'Evento'} - ${eventRow.Data || ''}`.trim();
+            
+            // Controlla se esiste una lista con lo stesso nome
+            const existingList = db.prepare("SELECT ID FROM MailList WHERE Descrizione=?").get(baseDescr);
+            let idLista;
+            let isNew = true;
+
+            if(existingList) {
+                idLista = existingList.ID;
+                isNew = false;
+                // Pulisci la lista esistente dai vecchi membri
+                db.prepare("DELETE FROM ListaMail WHERE IDListaMail=?").run(idLista);
+            } else {
+                const createResult = db.prepare("INSERT INTO MailList(Descrizione, Note) VALUES(?, ?)").run(
+                    baseDescr,
+                    `Creata automaticamente da Registro Agorà (ID evento: ${eventRow.ID})`
+                );
+                idLista = createResult.lastInsertRowid;
+            }
+
+            const presenti = db.prepare(`
+                SELECT p.IDAssociazione, p.Rappresentante
+                FROM AgoraPresenti p
+                WHERE p.IDRiunioni = ?
+            `).all(req.params.id);
+
+            const allMailIds = new Set();
+            const noMailList = [];
+            const presentiNomi = [];
+
+            const getDefaultMails = db.prepare("SELECT ID, Indirizzo FROM Mail WHERE IDAssociazione=? AND Predefinito=1 AND Indirizzo IS NOT NULL AND TRIM(Indirizzo)<>''");
+            const getAllMails = db.prepare("SELECT ID, Indirizzo FROM Mail WHERE IDAssociazione=? AND Indirizzo IS NOT NULL AND TRIM(Indirizzo)<>''");
+            const getRefMail = db.prepare("SELECT MAILREFERENTE as MailPersonale FROM Referenti WHERE ID_Associazione=? AND Nome=? AND MAILREFERENTE IS NOT NULL AND TRIM(MAILREFERENTE)<>'' LIMIT 1");
+            const getAltroMail = db.prepare("SELECT MAILALTRISOGGETTI as MailPersonale FROM AltriSoggetti WHERE ID_Associazione=? AND Nome=? AND MAILALTRISOGGETTI IS NOT NULL AND TRIM(MAILALTRISOGGETTI)<>'' LIMIT 1");
+            const getAssocName = db.prepare("SELECT SOGGETTO FROM Associazioni WHERE ID=?");
+            const findMailByAssocAndAddress = db.prepare("SELECT ID FROM Mail WHERE IDAssociazione=? AND LOWER(TRIM(Indirizzo))=LOWER(TRIM(?)) LIMIT 1");
+            const insertMail = db.prepare("INSERT INTO Mail(IDAssociazione, Indirizzo, PEC, Predefinito) VALUES(?, ?, 0, 0)");
+
+            presenti.forEach(p => {
+                const assocName = getAssocName.get(p.IDAssociazione)?.SOGGETTO || 'N/D';
+                const presentiLabel = p.Rappresentante ? `${assocName} - ${p.Rappresentante}` : assocName;
+                presentiNomi.push(presentiLabel);
+
+                const preferred = getDefaultMails.all(p.IDAssociazione);
+                const selectedAssocMails = preferred.length > 0 ? preferred : getAllMails.all(p.IDAssociazione);
+                selectedAssocMails.forEach(m => allMailIds.add(m.ID));
+
+                const nomeRapp = (p.Rappresentante || '').trim();
+                const personalEmail = nomeRapp ? ((getRefMail.get(p.IDAssociazione, nomeRapp)?.MailPersonale || getAltroMail.get(p.IDAssociazione, nomeRapp)?.MailPersonale) || '').trim() : '';
+
+                if(personalEmail) {
+                    let mailRow = findMailByAssocAndAddress.get(p.IDAssociazione, personalEmail);
+                    if(!mailRow) {
+                        const insertedMail = insertMail.run(p.IDAssociazione, personalEmail);
+                        mailRow = { ID: insertedMail.lastInsertRowid };
+                    }
+                    if(mailRow?.ID) allMailIds.add(mailRow.ID);
+                }
+
+                // Segnala chi non ha mail
+                if(!selectedAssocMails.length && !personalEmail) {
+                    noMailList.push(presentiLabel);
+                }
+            });
+
+            let inserted = 0;
+            const addMember = db.prepare("INSERT OR IGNORE INTO ListaMail(IDListaMail, IDMail, TipoInvio) VALUES(?, ?, 'CCN')");
+            allMailIds.forEach(idMail => {
+                const r = addMember.run(idLista, idMail);
+                inserted += r.changes;
+            });
+
+            res.json({
+                success: true,
+                idMailList: idLista,
+                descrizione: baseDescr,
+                totalMails: allMailIds.size,
+                inserted,
+                isNew,
+                presentiNomi,
+                noMailList
+            });
+        } catch(e){
+            res.status(500).json({error:e.message});
+        }
+    });
 
     // --- AGORA REPORT ---
     app.get('/api/report/agora-pdf', checkAuth, (req, res) => {
@@ -595,7 +919,7 @@ if (!db) {
             let currentTipoID = -1;
             events.forEach((ev) => {
                 if (ev.TipoID !== currentTipoID) { if (currentTipoID !== -1) doc.addPage(); currentTipoID = ev.TipoID; doc.fontSize(18).fillColor('#2c3e50').text(ev.IntestazionePagina || 'Tipologia Non Definita', { underline: true }); doc.moveDown(0.5).moveTo(50, doc.y).lineTo(550, doc.y).stroke().moveDown(1); }
-                doc.fillColor('black').fontSize(12).font('Helvetica-Bold').text(`Data: ${ev.Data} - ${ev.Evento}`); if (ev.ODG) doc.fontSize(10).font('Helvetica-Oblique').text(`ODG: ${ev.ODG}`, { indent: 10 }); doc.moveDown(0.5);
+                doc.fillColor('black').fontSize(12).font('Helvetica-Bold').text(`Data: ${ev.Data} - ${ev.Evento}`); if (ev.ODG) doc.fontSize(10).font('Helvetica-Oblique').text(`Argomenti Trattati: ${ev.ODG}`, { indent: 10 }); doc.moveDown(0.5);
                 const presenti = participants.filter(p => p.IDRiunioni === ev.ID).map(p => p.SOGGETTO); doc.fontSize(10).font('Helvetica').text('Associazioni Presenti:', { indent: 10, underline: true });
                 if (presenti.length > 0) doc.fontSize(10).font('Helvetica').text(presenti.join(', '), { indent: 20, align: 'justify' }); else doc.fontSize(10).font('Helvetica-Oblique').text('Nessuna associazione registrata.', { indent: 20 });
                 doc.moveDown(1.5);
@@ -629,7 +953,7 @@ if (!db) {
                     doc.moveDown(1);
                 }
                 doc.fillColor('black').fontSize(12).font('Helvetica-Bold').text(`Data: ${ev.Data} - ${ev.Evento}`);
-                if (ev.ODG) doc.fontSize(10).font('Helvetica-Oblique').text(`ODG: ${ev.ODG}`, { indent: 10 });
+                if (ev.ODG) doc.fontSize(10).font('Helvetica-Oblique').text(`Argomenti Trattati: ${ev.ODG}`, { indent: 10 });
                 
                 const nomeVerbale = ev.Verbale ? path.basename(ev.Verbale) : "Nessuno";
                 const nomeDoc = ev.Documenti ? path.basename(ev.Documenti) : "Nessuno";
@@ -675,53 +999,107 @@ if (!db) {
         } catch (e) { res.status(500).send("Errore ZIP: " + e.message); }
     });
 
-    app.post('/api/report/export-excel', checkAuth, (req, res) => {
+    app.get('/api/report/settings', checkAuth, checkAdmin, (req, res) => {
         try {
-            console.log('[REPORT] Inizio esportazione Excel + PDF...');
-            
-            // Verifiche preventive
-            if (!fs.existsSync(reportExcelDir)) {
-                fs.mkdirSync(reportExcelDir, { recursive: true });
-            }
-            if (!fs.existsSync(reportPdfDir)) {
-                fs.mkdirSync(reportPdfDir, { recursive: true });
-            }
-
-            const tables = [
-                { name: 'agora', sql: 'SELECT * FROM Agora' },
-                { name: 'agorapresenti', sql: 'SELECT * FROM AgoraPresenti' },
-                { name: 'agoratipoevento', sql: 'SELECT * FROM AgoraTipoEvento' },
-                { name: 'associazioni', sql: 'SELECT * FROM Associazioni' },
-                { name: 'report', sql: 'SELECT ID, Password FROM Report' }
-            ];
-
-            console.log('[REPORT] Creazione file Excel...');
-            const workbook = XLSX.utils.book_new();
-            tables.forEach((t) => {
-                const rows = db.prepare(t.sql).all().map(normalizeReportRow);
-                const sheet = XLSX.utils.json_to_sheet(rows);
-                XLSX.utils.book_append_sheet(workbook, sheet, t.name);
-            });
-
-            const excelPath = path.join(reportExcelDir, 'BaseDatiExcel.xlsx');
-            if (fs.existsSync(excelPath)) fs.unlinkSync(excelPath);
-            XLSX.writeFile(workbook, excelPath);
-            console.log(`[REPORT] File Excel salvato: ${excelPath}`);
-
-            console.log('[REPORT] Copia file PDF per aggiornamento...');
-            clearDirectory(reportPdfDir);
-            copyFlatFiles(uploadDir, reportPdfDir);
-            console.log('[REPORT] Copia file PDF completata');
-
-            res.json({ success: true, excelPath, folder: reportDir });
+            const row = db.prepare('SELECT Password FROM Report ORDER BY ID DESC LIMIT 1').get();
+            res.json({ Password: row?.Password || '' });
         } catch (e) {
-            console.error('[REPORT] Errore esportazione:', e);
             res.status(500).json({ error: e.message });
         }
     });
 
+    app.put('/api/report/settings', checkAuth, checkAdmin, (req, res) => {
+        try {
+            const password = (req.body?.Password || '').toString().trim();
+            const row = db.prepare('SELECT ID FROM Report ORDER BY ID DESC LIMIT 1').get();
+
+            if (row) db.prepare('UPDATE Report SET Password = ? WHERE ID = ?').run(password, row.ID);
+            else db.prepare('INSERT INTO Report (Password) VALUES (?)').run(password);
+
+            res.json({ success: true });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/report/open-folder', checkAuth, checkAdmin, (req, res) => {
+        try {
+            const reportDir = path.join(rootDir, 'Report');
+            const reportExcelDir = path.join(reportDir, 'Excel');
+            const reportPdfDir = path.join(reportDir, 'DocumentiPDF');
+
+            if (!fs.existsSync(reportDir)) fs.mkdirSync(reportDir, { recursive: true });
+            if (!fs.existsSync(reportExcelDir)) fs.mkdirSync(reportExcelDir, { recursive: true });
+            if (!fs.existsSync(reportPdfDir)) fs.mkdirSync(reportPdfDir, { recursive: true });
+
+            const openCmd = process.platform === 'win32'
+                ? `start "" "${reportDir}"`
+                : process.platform === 'darwin'
+                    ? `open "${reportDir}"`
+                    : `xdg-open "${reportDir}"`;
+            require('child_process').exec(openCmd);
+
+            res.json({ success: true, folder: reportDir });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.post('/api/report/export-excel', checkAuth, checkAdmin, (req, res) => {
+        try {
+            const reportDir = path.join(rootDir, 'Report');
+            const reportExcelDir = path.join(reportDir, 'Excel');
+            if (!fs.existsSync(reportExcelDir)) fs.mkdirSync(reportExcelDir, { recursive: true });
+
+            const rowsAgora = db.prepare(`
+                SELECT
+                    A.ID,
+                    A.Data,
+                    A.Evento,
+                    A.ODG,
+                    T.IntestazionePagina AS TipologiaEvento,
+                    A.Verbale,
+                    A.Documenti
+                FROM Agora A
+                LEFT JOIN AgoraTipoEvento T ON A.IDTipoEvento = T.ID
+                ORDER BY A.Data DESC, A.ID DESC
+            `).all();
+
+            const rowsPresenti = db.prepare(`
+                SELECT
+                    P.IDRiunioni,
+                    A.SOGGETTO AS Associazione,
+                    P.Rappresentante
+                FROM AgoraPresenti P
+                JOIN Associazioni A ON P.IDAssociazione = A.ID
+                ORDER BY P.IDRiunioni DESC, A.SOGGETTO ASC
+            `).all();
+
+            const rowsTipoEvento = db.prepare('SELECT ID, IntestazionePagina FROM AgoraTipoEvento ORDER BY ID ASC').all();
+            const rowsTipoDocumento = db.prepare('SELECT ID, Tipo FROM DocumentoTipo ORDER BY Tipo ASC').all();
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsAgora), 'Agora');
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsPresenti), 'Presenti');
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsTipoEvento), 'TipiEvento');
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rowsTipoDocumento), 'TipiDocumento');
+
+            const fileName = 'BaseDatiExcel.xlsx';
+            const filePath = path.join(reportExcelDir, fileName);
+
+            XLSX.writeFile(wb, filePath);
+
+            res.json({
+                success: true,
+                fileName,
+                filePath: path.join('Report', 'Excel', fileName)
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
     
-    // --- RUNTS ---
+    // --- RUNTS & CESVOT ---
     app.get('/api/runts/search', checkAuth, (req, res) => {
         const {q,prov} = req.query; if(!q || q.length<3) return res.json([]);
         res.json(db.prepare(`SELECT * FROM Runts WHERE (Denominazione LIKE ? OR CodiceFiscale LIKE ? OR Cognome LIKE ?) AND (Provincia LIKE ? OR Provincia IS NULL OR ?='') LIMIT 20`).all(`%${q}%`,`${q}%`,`%${q}%`,`%${prov||''}%`,prov||''));
@@ -749,38 +1127,153 @@ if (!db) {
         })();
         res.json({success:true});
     });
+
+    // --- IMPORT RUNTS AVANZATO (VERIFICA NOME & REFERENTE) ---
     app.post('/api/import/runts', checkAuth, checkAdmin, uploadFields, (req, res) => {
         if(!req.files || !req.files['fileRunts']) return res.status(400).json({error:"No file"});
         const fp = req.files['fileRunts'][0].path;
+        
         try {
-            const assocMap = {}; db.prepare("SELECT ID,SOGGETTO FROM Associazioni").all().forEach(r=>{if(r.SOGGETTO)assocMap[r.SOGGETTO.trim()]=r.ID});
             const wb = XLSX.readFile(fp, {codepage:65001});
             const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-            let count=0;
+            let changesLog = []; // Per il report PDF
+            
             db.transaction(()=>{
                 const stmtR = db.prepare("INSERT OR REPLACE INTO Runts (CodiceFiscale,Denominazione,Cognome,Nome,IDAssociazione) VALUES(?,?,?,?,?)");
                 const stmtA = db.prepare("UPDATE Associazioni SET CODICEFISCALE=?, ID_TIPOLOGIA=1 WHERE ID=?");
-                for(let i=1;i<data.length;i++){
-                    let row=data[i]; if(!row || row.length===0) continue;
-                    if(typeof row[0]==='string' && row[0].includes(';')) row=row[0].split(';');
-                    const clean=s=>s?String(s).replace(/^"|"$/g,'').trim():null;
-                    const cf=clean(row[0]), den=clean(row[2]), cog=clean(row[4]), nom=clean(row[5]);
+                
+                // Mappa per la ricerca rapida delle associazioni
+                const assocByCF = {}; 
+                const assocByName = {};
+                const assocs = db.prepare("SELECT ID, CODICEFISCALE, SOGGETTO FROM Associazioni").all();
+                
+                assocs.forEach(a => {
+                    if(a.CODICEFISCALE) assocByCF[a.CODICEFISCALE.trim()] = a.ID;
+                    if(a.SOGGETTO) assocByName[a.SOGGETTO.trim().toUpperCase()] = a.ID;
+                });
+
+                for(let i=1; i<data.length; i++){
+                    let row = data[i];
+                    if(!row || row.length === 0) continue;
+                    if(typeof row[0]==='string' && row[0].includes(';')) row = row[0].split(';');
+                    const clean = s => s ? String(s).replace(/^"|"$/g,'').trim() : null;
+                    
+                    const cf = clean(row[0]);
+                    const den = clean(row[2]);
+                    const cog = clean(row[4]);
+                    const nom = clean(row[5]);
+
+                    // Salto se mancano i dati essenziali per l'identificazione
+                    if(!cf && !den) continue;
+
+                    // 1. RICERCA ASSOCIAZIONE ESISTENTE
+                    // Prima priorità: Codice Fiscale
+                    let idAssoc = null;
+                    if(cf && assocByCF[cf]) {
+                        idAssoc = assocByCF[cf];
+                    } 
+                    // Seconda priorità: Nome (se CF fallisce o manca)
+                    else if(den && assocByName[den.toUpperCase()]) {
+                        idAssoc = assocByName[den.toUpperCase()];
+                    }
+
+                    // 2. AGGIORNAMENTO TABELLA RUNTS (Solo se c'è CF)
                     if(cf) {
-                        const idAssoc = den && assocMap[den] ? assocMap[den] : null;
-                        stmtR.run(cf,den,cog,nom,idAssoc);
-                        if(idAssoc) { stmtA.run(cf,idAssoc); count++; }
+                        stmtR.run(cf, den, cog, nom, idAssoc);
+                    }
+
+                    // 3. AGGIORNAMENTO DATI ASSOCIAZIONE (Se trovata)
+                    if(idAssoc) {
+                        // Aggiorna CF e Tipo in Associazione (se il file ha il CF)
+                        if(cf) stmtA.run(cf, idAssoc);
+                        
+                        // --- VERIFICA REFERENTE ---
+                        if(cog && nom) {
+                            const newRefName = `${cog} ${nom}`.trim();
+                            // Cerco il referente ATTUALE nel DB
+                            const currentRef = db.prepare("SELECT * FROM Referenti WHERE ID_Associazione=? LIMIT 1").get(idAssoc);
+                            
+                            if(!currentRef) {
+                                // CASO 1: Referente Mancante -> AGGIUNGO
+                                db.prepare("INSERT INTO Referenti(ID_Associazione,Nome) VALUES(?,?)").run(idAssoc, newRefName);
+                                changesLog.push({
+                                    assoc: den || "N/D",
+                                    action: "AGGIUNTO",
+                                    detail: `Referente: ${newRefName}`
+                                });
+                            } else {
+                                // CASO 2: Referente Esistente -> CONFRONTO
+                                // Normalizzo per evitare differenze di maiuscole/spazi
+                                const currNorm = currentRef.Nome.trim().toUpperCase();
+                                const newNorm = newRefName.toUpperCase();
+
+                                if(currNorm !== newNorm) {
+                                    // Sono diversi -> AGGIORNO
+                                    db.prepare("UPDATE Referenti SET Nome=? WHERE ID=?").run(newRefName, currentRef.ID);
+                                    changesLog.push({
+                                        assoc: den || "N/D",
+                                        action: "MODIFICATO",
+                                        detail: `Ref: '${currentRef.Nome}' -> '${newRefName}'`
+                                    });
+                                }
+                                // Se sono uguali, non faccio nulla.
+                            }
+                        }
                     }
                 }
             })();
-            deletePhysicalFile(fp); res.json({success:true, message:`Importati ${count}`});
-        } catch(e) { deletePhysicalFile(fp); res.status(500).json({error:e.message}); }
+
+            // GENERAZIONE REPORT PDF
+            const reportName = `Report_Import_Runts_${Date.now()}.pdf`;
+            const reportPath = path.join(tempDir, reportName);
+            const doc = new PDFDocument();
+            const stream = fs.createWriteStream(reportPath);
+            doc.pipe(stream);
+
+            doc.fontSize(20).text('Report Importazione RUNTS', { align: 'center' });
+            doc.moveDown();
+            doc.fontSize(12).text(`Data Elaborazione: ${new Date().toLocaleString()}`);
+            doc.text(`Totale Modifiche ai Referenti: ${changesLog.length}`);
+            doc.moveDown();
+            
+            if(changesLog.length > 0) {
+                changesLog.forEach(log => {
+                    doc.fontSize(10).font('Helvetica-Bold').text(`Associazione: ${log.assoc}`);
+                    
+                    let color = 'black';
+                    if(log.action === 'AGGIUNTO') color = 'green';
+                    if(log.action === 'MODIFICATO') color = 'orange';
+
+                    doc.fillColor(color).fontSize(10).font('Helvetica').text(`[${log.action}] ${log.detail}`);
+                    doc.fillColor('black'); // Reset colore
+                    doc.moveDown(0.5);
+                });
+            } else {
+                doc.fontSize(12).text("Nessuna modifica necessaria. Tutti i referenti erano già allineati.", { align: 'center' });
+            }
+
+            doc.end();
+
+            stream.on('finish', () => {
+                deletePhysicalFile(fp);
+                res.json({
+                    success: true, 
+                    message: `Importazione completata. Modifiche: ${changesLog.length}.`,
+                    reportUrl: `/archivio_files/temp/${reportName}`
+                });
+            });
+
+        } catch(e) { 
+            deletePhysicalFile(fp); 
+            res.status(500).json({error:e.message}); 
+        }
     });
 
     // --- MAILING LIST ---
     app.get('/api/maillist', checkAuth, (req, res) => res.json(db.prepare("SELECT * FROM MailList ORDER BY Descrizione").all()));
     app.post('/api/maillist', checkAuth, checkAdmin, (req, res) => { try{res.json({success:true, id:db.prepare("INSERT INTO MailList(Descrizione,Note) VALUES(?,?)").run(req.body.Descrizione,req.body.Note).lastInsertRowid});}catch(e){res.status(500).json({error:e.message});} });
     app.delete('/api/maillist/:id', checkAuth, checkAdmin, (req, res) => { try{db.transaction(()=>{db.prepare("DELETE FROM ListaMail WHERE IDListaMail=?").run(req.params.id);db.prepare("DELETE FROM MailList WHERE ID=?").run(req.params.id);})();res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
-    app.get('/api/maillist/:id/members', checkAuth, (req, res) => res.json(db.prepare(`SELECT lm.ID, lm.IDMail, lm.TipoInvio, m.Indirizzo, a.SOGGETTO, m.Predefinito FROM ListaMail lm JOIN Mail m ON lm.IDMail=m.ID JOIN Associazioni a ON m.IDAssociazione=a.ID WHERE lm.IDListaMail=? ORDER BY a.SOGGETTO`).all(req.params.id)));
+    app.get('/api/maillist/:id/members', checkAuth, (req, res) => res.json(db.prepare(`SELECT lm.ID, lm.IDMail, lm.TipoInvio, m.Indirizzo, a.SOGGETTO FROM ListaMail lm JOIN Mail m ON lm.IDMail=m.ID JOIN Associazioni a ON m.IDAssociazione=a.ID WHERE lm.IDListaMail=? ORDER BY a.SOGGETTO`).all(req.params.id)));
     app.post('/api/maillist/:id/add', checkAuth, checkAdmin, (req, res) => {
         const {IDMail,TipoInvio,EmailRaw,IDAssociazione}=req.body; const idL=req.params.id;
         try {
@@ -793,72 +1286,11 @@ if (!db) {
         } catch(e){res.status(500).json({error:e.message});}
     });
     app.delete('/api/maillist/member/:id', checkAuth, checkAdmin, (req, res) => { try{db.prepare("DELETE FROM ListaMail WHERE ID=?").run(req.params.id);res.json({success:true});}catch(e){res.status(500).json({error:e.message});} });
-    
     app.get('/api/maillist/search/associazioni', checkAuth, (req, res) => {
         const {q,tipo} = req.query; if((!q || q.length<3) && !tipo) return res.json([]);
         let sql = `SELECT m.ID as IDMail, m.Indirizzo, m.Predefinito, a.ID as IDAssoc, a.SOGGETTO, a.ID_TIPOLOGIA FROM Mail m JOIN Associazioni a ON m.IDAssociazione=a.ID LEFT JOIN Referenti r ON a.ID=r.ID_Associazione LEFT JOIN AltriSoggetti s ON a.ID=s.ID_Associazione WHERE 1=1`;
         const params=[]; if(tipo){sql+=` AND a.ID_TIPOLOGIA=?`;params.push(tipo);} if(q){sql+=` AND (a.SOGGETTO LIKE ? OR r.Nome LIKE ? OR s.Nome LIKE ?)`;params.push(`%${q}%`,`%${q}%`,`%${q}%`);}
         res.json(db.prepare(sql+` GROUP BY m.ID ORDER BY a.SOGGETTO LIMIT 100`).all(...params));
-    });
-
-    // NUOVA RICERCA UNIFICATA (Aggiornamento Richiesto)
-    app.get('/api/maillist/search/unified', checkAuth, (req, res) => {
-        const { q } = req.query;
-        if (!q || q.length < 3) return res.json([]);
-
-        const term = `%${q}%`;
-        
-        const sql = `
-            SELECT 
-                m.ID as IDMail,
-                m.Indirizzo, 
-                a.ID as IDAssociazione, 
-                a.SOGGETTO, 
-                'Associazione' as Fonte,
-                m.Predefinito
-            FROM Mail m 
-            JOIN Associazioni a ON m.IDAssociazione = a.ID 
-            WHERE (a.SOGGETTO LIKE ? OR m.Indirizzo LIKE ?)
-            
-            UNION ALL
-            
-            SELECT 
-                NULL as IDMail,
-                r.MAILREFERENTE as Indirizzo, 
-                a.ID as IDAssociazione, 
-                a.SOGGETTO, 
-                'Referente: ' || r.Nome as Fonte,
-                0 as Predefinito
-            FROM Referenti r 
-            JOIN Associazioni a ON r.ID_Associazione = a.ID 
-            WHERE r.MAILREFERENTE IS NOT NULL AND r.MAILREFERENTE <> '' 
-            AND (a.SOGGETTO LIKE ? OR r.Nome LIKE ? OR r.MAILREFERENTE LIKE ?)
-            
-            UNION ALL
-            
-            SELECT 
-                NULL as IDMail,
-                s.MAILALTRISOGGETTI as Indirizzo, 
-                a.ID as IDAssociazione, 
-                a.SOGGETTO, 
-                'Altro: ' || s.Nome as Fonte,
-                0 as Predefinito
-            FROM AltriSoggetti s 
-            JOIN Associazioni a ON s.ID_Associazione = a.ID 
-            WHERE s.MAILALTRISOGGETTI IS NOT NULL AND s.MAILALTRISOGGETTI <> '' 
-            AND (a.SOGGETTO LIKE ? OR s.Nome LIKE ? OR s.MAILALTRISOGGETTI LIKE ?)
-            
-            ORDER BY SOGGETTO ASC, Fonte ASC
-            LIMIT 100
-        `;
-
-        try {
-            // Parametri: 2 per Associazione, 3 per Referente, 3 per Altri = 8 totali
-            const rows = db.prepare(sql).all(term, term, term, term, term, term, term, term);
-            res.json(rows);
-        } catch (e) {
-            res.status(500).json({ error: e.message });
-        }
     });
 
     // BACKUP
@@ -875,8 +1307,13 @@ if (!db) {
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), t.name.substring(0,31));
             });
             const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-            res.setHeader('Content-Disposition', `attachment; filename="Backup_Full_${Date.now()}.xlsx"`);
+            
+            // AUTODISTRUZIONE EXCEL (2 MINUTI)
+            const excelName = `Backup_Full_${Date.now()}.xlsx`;
+            
+            res.setHeader('Content-Disposition', `attachment; filename="${excelName}"`);
             res.send(buffer);
+
         } catch(e) { res.status(500).send(e.message); }
     });
 
