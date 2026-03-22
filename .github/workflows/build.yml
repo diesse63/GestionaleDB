@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch: # Permette di avviare manualmente
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Compila su ${{ matrix.os }}
@@ -20,7 +23,7 @@ jobs:
     - name: Installa Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 18
+          node-version: 24
         cache: 'npm'
 
     - name: Installa dipendenze
@@ -36,12 +39,12 @@ jobs:
     # Compilazione specifica per Windows
     - name: Crea Eseguibile Windows
       if: runner.os == 'Windows'
-      run: npx pkg . --targets node18-win-x64 --output gestionale-windows.exe --compress GZip
+      run: npx pkg . --targets node24-win-x64 --output gestionale-windows.exe --compress GZip
 
     # Compilazione specifica per Mac
     - name: Crea Eseguibile Mac
       if: runner.os == 'macOS'
-      run: npx pkg . --targets node18-macos-x64 --output gestionale-macos --compress GZip
+      run: npx pkg . --targets node24-macos-x64 --output gestionale-macos --compress GZip
 
     # Carica il file finito su GitHub per fartelo scaricare
     - name: Carica Risultato
