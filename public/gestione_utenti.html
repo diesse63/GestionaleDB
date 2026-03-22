@@ -1,0 +1,237 @@
+
+
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestione Utenti</title>
+    <!-- Librerie Stile -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script> <!-- Icone -->
+</head>
+<body class="bg-base-200 min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <div class="navbar bg-white shadow-md z-10 px-4">
+        <div class="flex-1">
+            <a href="/dashboard_servizi" class="btn btn-ghost normal-case text-xl text-red-700">⬅ Torna ai Servizi</a>
+        </div>
+        <div class="flex-none gap-2">
+            <h1 class="text-xl font-bold uppercase text-base-content mr-4">Gestione Utenti</h1>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container mx-auto p-6 max-w-5xl flex-grow">
+        
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h2 class="text-3xl font-bold text-gray-800">Elenco Utenti</h2>
+                <p class="text-gray-500">Gestisci l'accesso e i permessi di amministrazione.</p>
+            </div>
+            <button onclick="openModal()" class="btn btn-primary gap-2">
+                <i data-lucide="user-plus"></i> Nuovo Utente
+            </button>
+        </div>
+
+        <!-- Tabella -->
+        <div class="overflow-x-auto bg-white rounded-lg shadow-xl">
+            <table class="table w-full">
+                <!-- Head -->
+                <thead class="bg-base-200">
+                    <tr>
+                        <th>Nome</th>
+                        <th>Email (Login)</th>
+                        <th class="text-center">Ruolo</th>
+                        <th class="text-right">Azioni</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <!-- Righe generate via JS -->
+                    <tr><td colspan="4" class="text-center py-4">Caricamento...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- MODALE CREAZIONE/MODIFICA -->
+    <dialog id="userModal" class="modal">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg mb-4" id="modalTitle">Nuovo Utente</h3>
+            <form id="userForm">
+                <input type="hidden" id="userId">
+                
+                <div class="form-control w-full mb-3">
+                    <label class="label"><span class="label-text">Nome e Cognome</span></label>
+                    <input type="text" id="nome" class="input input-bordered w-full" required />
+                </div>
+
+                <div class="form-control w-full mb-3">
+                    <label class="label"><span class="label-text">Email (Usata per il login)</span></label>
+                    <input type="email" id="email" class="input input-bordered w-full" required />
+                </div>
+
+                <div class="form-control w-full mb-3">
+                    <label class="label">
+                        <span class="label-text">Password</span>
+                        <span class="label-text-alt text-gray-500" id="passwordHint">Obbligatoria per nuovi utenti</span>
+                    </label>
+                    <input type="password" id="password" class="input input-bordered w-full" placeholder="*****" />
+                </div>
+
+                <div class="form-control w-full mb-6">
+                    <label class="label cursor-pointer justify-start gap-4">
+                        <span class="label-text font-bold">Ruolo Amministratore</span> 
+                        <input type="checkbox" id="isAdmin" class="checkbox checkbox-primary" />
+                    </label>
+                    <div class="text-xs text-gray-500 mt-1">Abilita funzioni avanzate di sistema.</div>
+                </div>
+
+                <div class="modal-action">
+                    <button type="button" class="btn" onclick="userModal.close()">Annulla</button>
+                    <button type="submit" class="btn btn-primary">Salva</button>
+                </div>
+            </form>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button>close</button>
+        </form>
+    </dialog>
+
+    <script>
+        // Inizializza Icone
+        lucide.createIcons();
+
+        // Carica dati all'avvio
+        document.addEventListener('DOMContentLoaded', loadUsers);
+
+        function loadUsers() {
+    fetch('/api/utenti')
+        .then(res => {
+            if (!res.ok) throw new Error("Errore server: " + res.statusText);
+            return res.json();
+        })
+        .then(data => {
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
+            
+            // Controllo di sicurezza se data non è un array
+            if (!Array.isArray(data)) {
+                console.error("Dati ricevuti non validi:", data);
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-red-600 font-bold">Errore nel formato dati ricevuto.</td></tr>';
+                return;
+            }
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">Nessun utente trovato.</td></tr>';
+                return;
+            }
+            
+            data.forEach(user => {
+                // ... (codice generazione righe invariato) ...
+                const row = document.createElement('tr');
+                const isAdminBadge = user.Amministratore 
+                    ? '<div class="badge badge-error gap-2 text-white font-bold">ADMIN</div>' 
+                    : '<div class="badge badge-ghost">Utente</div>';
+                
+                row.innerHTML = `
+                    <td class="font-bold">${user.Nome}</td>
+                    <td class="font-mono text-sm">${user.Email}</td>
+                    <td class="text-center">${isAdminBadge}</td>
+                    <td class="text-right">
+                        <button class="btn btn-square btn-sm btn-ghost text-blue-600" onclick='editUser(${JSON.stringify(user)})'>
+                            <i data-lucide="edit-2" class="w-4 h-4"></i>
+                        </button>
+                        <button class="btn btn-square btn-sm btn-ghost text-red-600" onclick="deleteUser(${user.ID})">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            lucide.createIcons();
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById('usersTableBody').innerHTML = `<tr><td colspan="4" class="text-center text-red-600 font-bold">Impossibile caricare utenti: ${err.message}</td></tr>`;
+        });
+}
+
+        function openModal(user = null) {
+            const modal = document.getElementById('userModal');
+            const form = document.getElementById('userForm');
+            const title = document.getElementById('modalTitle');
+            const passHint = document.getElementById('passwordHint');
+            const passInput = document.getElementById('password');
+
+            form.reset();
+
+            if (user) {
+                // MODIFICA
+                title.innerText = "Modifica Utente";
+                document.getElementById('userId').value = user.ID;
+                document.getElementById('nome').value = user.Nome;
+                document.getElementById('email').value = user.Email;
+                document.getElementById('isAdmin').checked = (user.Amministratore === 1);
+                
+                passInput.required = false;
+                passHint.innerText = "Lascia vuoto per mantenere la password attuale";
+            } else {
+                // NUOVO
+                title.innerText = "Nuovo Utente";
+                document.getElementById('userId').value = "";
+                passInput.required = true;
+                passHint.innerText = "Inserisci una password sicura";
+            }
+            modal.showModal();
+        }
+
+        function editUser(user) {
+            openModal(user);
+        }
+
+        document.getElementById('userForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const id = document.getElementById('userId').value;
+            const isEdit = !!id;
+
+            const data = {
+                Nome: document.getElementById('nome').value,
+                Email: document.getElementById('email').value,
+                Password: document.getElementById('password').value,
+                Amministratore: document.getElementById('isAdmin').checked
+            };
+
+            const url = isEdit ? `/api/utenti/${id}` : '/api/utenti';
+            const method = isEdit ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(res => {
+                if (res.error) alert("Errore: " + res.error);
+                else {
+                    document.getElementById('userModal').close();
+                    loadUsers();
+                }
+            })
+            .catch(err => alert("Errore di rete"));
+        });
+
+        function deleteUser(id) {
+            if(!confirm("Sei sicuro di voler eliminare questo utente? L'azione è irreversibile.")) return;
+            fetch(`/api/utenti/${id}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(res => {
+                if (res.error) alert("Errore: " + res.error);
+                else loadUsers();
+            });
+        }
+    </script>
+</body>
+</html>

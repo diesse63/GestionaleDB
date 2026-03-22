@@ -4,17 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anagrafica Enti - Gestionale</title>
-    <!-- Librerie Stile (Tailwind + DaisyUI) -->
     <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .modal-box { max-width: 900px; }
+        #searchResults { max-height: 200px; overflow-y: auto; }
     </style>
 </head>
 <body class="bg-base-200 min-h-screen relative p-6">
 
-    <a href="dashboard_servizi" class="btn btn-sm btn-neutral absolute top-4 left-4 shadow-md z-10">
-        ⬅ Indietro
+    <!-- Torna alla Dashboard Anagrafica -->
+    <a href="dashboard_anagrafica.html" class="btn btn-sm btn-neutral absolute top-4 left-4 shadow-md z-10">
+        ⬅ Ritorna alla Dashboard Anagrafica
     </a>
 
     <div class="container mx-auto max-w-7xl mt-12">
@@ -22,31 +23,43 @@
         <div class="flex flex-col md:flex-row justify-between items-end mb-6">
             <div>
                 <h1 class="text-4xl font-black uppercase text-blue-800">
-                    Anagrafica Enti
+                    Anagrafica Associazioni/Enti
                 </h1>
-                <p class="text-gray-500 font-bold mt-1">Gestione Associazioni, Referenti e Incarichi</p>
+                <p class="text-gray-500 font-bold mt-1">Elenco Generale</p>
+                <p class="text-xs text-gray-400 mt-2" id="recordCounter">Caricamento...</p>
             </div>
             
-            <div class="flex gap-3 mt-4 md:mt-0">
-                <div class="join shadow-sm">
-                    <input type="text" id="searchInput" aria-label="Cerca ente o persona" placeholder="🔍 Cerca ente o nome..." class="input input-bordered join-item w-full max-w-xs focus:outline-none" onkeyup="filtraTabella()" />
+            <div class="flex gap-3 mt-4 md:mt-0 items-end">
+                <!-- Filtro Tipologia -->
+                <div class="form-control w-full max-w-xs">
+                    <label class="label py-0"><span class="label-text text-xs font-bold">Filtra per Tipologia</span></label>
+                    <select id="filtroTipologia" class="select select-bordered select-sm w-full" onchange="filtraTabella()">
+                        <option value="">-- Tutte --</option>
+                    </select>
                 </div>
-                <button onclick="apriModale()" class="btn btn-primary text-white shadow-md border-none bg-blue-600 hover:bg-blue-700">
-                    ➕ Nuovo Ente
+
+                <!-- Ricerca Testuale -->
+                <div class="join shadow-sm">
+                    <input type="text" id="searchInput" placeholder="🔍 Cerca associazione/ente, CF o nome..." class="input input-sm input-bordered join-item w-full max-w-xs focus:outline-none" onkeyup="filtraTabella()" />
+                </div>
+                
+                <!-- Nuovo Ente -->
+                <button onclick="apriModaleNuovo()" class="btn btn-sm btn-primary text-white shadow-md border-none bg-blue-600 hover:bg-blue-700">
+                    ➕ Nuova Associazione/Ente
                 </button>
             </div>
         </div>
 
         <div class="card bg-white shadow-xl border-t-8 border-blue-600">
             <div class="card-body p-0">
-                <div class="overflow-x-auto rounded-b-xl">
+                <div class="overflow-x-auto rounded-b-xl min-h-[400px]">
                     <table class="table table-zebra w-full" id="tabellaEnti">
                         <thead class="bg-gray-100 text-blue-900 uppercase text-sm font-bold border-b-2 border-gray-200">
                             <tr>
-                                <th class="w-1/4 py-4">Soggetto / Ente</th>
+                                <th class="w-1/4 py-4">Associazioni/Enti</th>
                                 <th class="w-1/6 py-4">Tipologia</th>
-                                <th class="w-1/4 py-4">Soggetti Collegati</th>
-                                <th class="w-1/4 py-4"></th> 
+                                <th class="w-1/4 py-4">Referenti & Altri Soggetti</th>
+                                <th class="w-1/4 py-4">Incarichi</th> 
                                 <th class="text-center py-4">Azioni</th>
                             </tr>
                         </thead>
@@ -55,422 +68,364 @@
                         </tbody>
                     </table>
                 </div>
+                <!-- Paginazione -->
+                <div class="flex justify-between items-center p-4 border-t bg-gray-50" id="paginationControls">
+                    <button class="btn btn-sm" onclick="cambiaPagina(-1)">« Prec</button>
+                    <span class="text-sm font-bold text-gray-600" id="pageIndicator">Pagina 1</span>
+                    <button class="btn btn-sm" onclick="cambiaPagina(1)">Succ »</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- MODALE INSERIMENTO / MODIFICA -->
-    <div id="modalAnagrafica" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex justify-center items-center backdrop-blur-sm">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden transform transition-all scale-100 flex flex-col max-h-[90vh]">
+<!-- MODALE SOLO NUOVO INSERIMENTO -->
+    <div id="modalNuovo" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex justify-center items-center backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl h-auto max-h-[90vh] flex flex-col overflow-hidden">
             
-            <div class="bg-blue-600 p-4 flex justify-between items-center shrink-0">
-                <h3 class="text-white text-xl font-bold uppercase" id="modalTitle">Gestione Ente</h3>
-                <button onclick="chiudiModale()" class="text-white hover:text-gray-200 text-2xl font-bold">&times;</button>
+            <!-- Header Modale -->
+            <div class="bg-blue-600 p-4 flex justify-between items-center flex-shrink-0">
+                <h3 class="text-white text-xl font-bold uppercase">Nuova Associazione/Ente</h3>
+                <button onclick="chiudiModale()" class="text-white hover:text-gray-200 text-2xl">&times;</button>
             </div>
 
-            <div class="p-6 overflow-y-auto">
-                <form id="formAnagrafica" onsubmit="salvaEnte(event)">
-                    <input type="hidden" name="ID" id="idEnte">
+            <!-- Corpo Modale (Scrollabile se necessario) -->
+            <div class="flex-1 overflow-y-auto p-6">
+                <form id="formNuovo" onsubmit="creaEnte(event)">
                     
-                    <!-- PRIMA PARTE: DATI PRINCIPALI -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div class="form-control">
-                            <label class="label font-bold" for="SOGGETTO">Soggetto / Nome Ente</label>
-                            <input type="text" name="SOGGETTO" id="SOGGETTO" class="input input-bordered focus:input-primary" required>
+                    <!-- BOX RICERCA RUNTS (SEMPLIFICATO) -->
+                    <div class="mb-6 bg-yellow-50 border border-yellow-300 rounded-lg p-5">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="text-2xl">🏛️</span>
+                            <div>
+                                <h4 class="font-bold text-yellow-900 text-lg">Importa da RUNTS</h4>
+                                <p class="text-xs text-yellow-700">Cerca per <b>Denominazione</b> o <b>Cognome Referente</b>.</p>
+                            </div>
                         </div>
-                        
+                        <!-- Input Unico -->
+                        <div class="form-control w-full relative">
+                            <input type="text" id="searchRuntsInput" 
+                                class="input input-lg input-bordered w-full shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400" 
+                                placeholder="Scrivi qui per cercare..." 
+                                autocomplete="off"
+                                onkeyup="handleRuntsSearch()">
+                            <div id="runtsLoader" class="absolute right-4 top-4 hidden">
+                                <span class="loading loading-spinner loading-sm text-yellow-600"></span>
+                            </div>
+                        </div>
+                        <div id="resultsContainer" class="mt-3 hidden">
+                            <label class="label text-xs font-bold uppercase text-gray-500 pb-1">Risultati trovati:</label>
+                            <div id="searchResults" class="bg-white border border-gray-300 rounded-lg shadow-inner max-h-48 overflow-y-auto divide-y divide-gray-100">
+                                <!-- I risultati vengono inseriti qui via JS -->
+                            </div>
+                        </div>
+                    </div>
+                    <!-- FINE RICERCA RUNTS -->
+
+                    <hr class="border-gray-200 mb-6">
+
+                    <!-- FORM DATI ENTE -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-4">
+                        <div class="form-control md:col-span-2">
+                            <label class="label font-bold text-sm text-gray-700">Denominazione Associazione/Ente *</label>
+                            <input type="text" name="SOGGETTO" id="NEW_SOGGETTO" class="input input-bordered w-full" required>
+                        </div>
                         <div class="form-control">
-                            <label class="label font-bold" for="ID_TIPOLOGIA">Tipologia</label>
-                            <select name="ID_TIPOLOGIA" id="ID_TIPOLOGIA" class="select select-bordered focus:select-primary" onchange="toggleIncarichi()">
-                                <!-- JS -->
+                            <label class="label font-bold text-sm text-gray-700">Codice Fiscale</label>
+                            <input type="text" name="CODICEFISCALE" id="NEW_CF" class="input input-bordered w-full uppercase tracking-wider" maxlength="16">
+                        </div>
+                        <div class="form-control">
+                            <label class="label font-bold text-sm text-gray-700">Tipologia</label>
+                            <select name="ID_TIPOLOGIA" id="NEW_TIPOLOGIA" class="select select-bordered w-full" onchange="toggleIncarichiNuovo()">
+                                <!-- Popolato via JS -->
                             </select>
                         </div>
+                    </div>
 
-                        <div class="form-control">
-                            <label class="label font-bold" for="MAIL">Email</label>
-                            <input type="email" name="MAIL" id="MAIL" class="input input-bordered">
-                        </div>
-
-                        <div class="form-control">
-                            <label class="label font-bold" for="PEC">PEC</label>
-                            <input type="email" name="PEC" id="PEC" class="input input-bordered">
-                        </div>
-
-                        <div id="divIncarichi" class="col-span-1 md:col-span-2 bg-blue-50 p-4 rounded-lg border border-blue-100 hidden">
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="form-control">
-                                    <label class="label cursor-pointer justify-start gap-4">
-                                        <input type="checkbox" name="TAVOLO" id="TAVOLO" class="toggle toggle-primary toggle-lg" value="1">
-                                        <span class="label-text font-bold text-lg">Partecipa al Tavolo</span>
-                                    </label>
-                                </div>
-                                <div class="form-control">
-                                    <label class="label cursor-pointer justify-start gap-4">
-                                        <input type="checkbox" name="DIRETTIVO_DELEGAZIONE" id="DIRETTIVO_DELEGAZIONE" class="toggle toggle-secondary toggle-lg" value="1">
-                                        <span class="label-text font-bold text-lg">Membro Direttivo</span>
-                                    </label>
-                                </div>
-                            </div>
+                    <div id="divIncarichiNuovo" class="bg-blue-50 p-4 rounded-lg border border-blue-100 hidden mb-6">
+                        <h4 class="text-sm font-bold text-blue-800 mb-2">Incarichi Associativi</h4>
+                        <div class="flex gap-6">
+                            <label class="cursor-pointer flex items-center gap-2">
+                                <input type="checkbox" name="TAVOLO" id="NEW_TAVOLO" class="checkbox checkbox-primary checkbox-sm" value="1">
+                                <span class="label-text font-semibold">Membro del Tavolo</span>
+                            </label>
+                            <label class="cursor-pointer flex items-center gap-2">
+                                <input type="checkbox" name="DIRETTIVO_DELEGAZIONE" id="NEW_DIRETTIVO" class="checkbox checkbox-secondary checkbox-sm" value="1">
+                                <span class="label-text font-semibold">Direttivo Delegazione</span>
+                            </label>
                         </div>
                     </div>
 
-                    <!-- SECONDA PARTE: GESTIONE REFERENTI E ALTRI SOGGETTI (Solo in modifica) -->
-                    <div id="areaSoggettiCollegati" class="hidden border-t-2 border-gray-200 mt-6 pt-4">
-                        <div class="alert alert-warning shadow-sm mb-4 py-2 text-sm">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                            <span>Modifiche ai soggetti collegati vengono salvate immediatamente.</span>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            
-                            <!-- COLONNA REFERENTI -->
-                            <div class="bg-gray-50 p-4 rounded-lg border flex flex-col h-[350px]">
-                                <h4 class="font-black text-blue-800 uppercase text-sm mb-2">Gestione Referenti</h4>
-                                
-                                <!-- Lista Scrollable -->
-                                <ul id="listaReferenti" class="space-y-2 mb-3 overflow-y-auto flex-grow pr-1">
-                                    <!-- JS popola qui -->
-                                </ul>
-
-                                <!-- Area Input Fissa in basso -->
-                                <div class="pt-2 border-t border-gray-200 bg-gray-50 mt-auto">
-                                    <input type="hidden" id="refIdEditing"> <!-- ID per modifica -->
-                                    <div class="flex flex-col gap-2">
-                                        <input type="text" id="newReferente" aria-label="Nome Referente" placeholder="Nome Referente" class="input input-sm input-bordered w-full font-bold">
-                                        <input type="email" id="mailReferente" aria-label="Email Referente" placeholder="Email (opzionale)" class="input input-sm input-bordered w-full">
-                                        <div class="flex gap-2">
-                                            <button type="button" id="btnCancelRef" onclick="resetInputRef()" class="btn btn-sm btn-ghost w-1/3 hidden">Annulla</button>
-                                            <button type="button" id="btnSaveRef" onclick="gestisciSoggetto('Referenti')" class="btn btn-sm btn-primary text-white flex-grow">➕ Aggiungi</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- COLONNA ALTRI SOGGETTI -->
-                            <div class="bg-gray-50 p-4 rounded-lg border flex flex-col h-[350px]">
-                                <h4 class="font-black text-indigo-800 uppercase text-sm mb-2">Gestione Altri Soggetti</h4>
-                                
-                                <!-- Lista Scrollable -->
-                                <ul id="listaAltri" class="space-y-2 mb-3 overflow-y-auto flex-grow pr-1">
-                                    <!-- JS popola qui -->
-                                </ul>
-
-                                <!-- Area Input Fissa in basso -->
-                                <div class="pt-2 border-t border-gray-200 bg-gray-50 mt-auto">
-                                    <input type="hidden" id="altIdEditing"> <!-- ID per modifica -->
-                                    <div class="flex flex-col gap-2">
-                                        <input type="text" id="newAltro" aria-label="Nome Altro Soggetto" placeholder="Nome Soggetto" class="input input-sm input-bordered w-full font-bold">
-                                        <input type="email" id="mailAltro" aria-label="Email Altro Soggetto" placeholder="Email (opzionale)" class="input input-sm input-bordered w-full">
-                                        <div class="flex gap-2">
-                                            <button type="button" id="btnCancelAlt" onclick="resetInputAlt()" class="btn btn-sm btn-ghost w-1/3 hidden">Annulla</button>
-                                            <button type="button" id="btnSaveAlt" onclick="gestisciSoggetto('Altri')" class="btn btn-sm btn-primary text-white flex-grow bg-indigo-600 hover:bg-indigo-700 border-none">➕ Aggiungi</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
-                    </div>
-
-                    <div class="flex justify-end gap-3 mt-6 border-t pt-4">
+                    <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
                         <button type="button" onclick="chiudiModale()" class="btn btn-ghost">Annulla</button>
-                        <button type="submit" class="btn btn-primary text-white bg-blue-600 hover:bg-blue-700 border-none">💾 Salva Modifiche</button>
+                        <button type="submit" class="btn btn-primary text-white px-8">Salva Ente</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- SCRIPT -->
     <script>
+        // --- VARIABILI GLOBALI ---
         let listaTipologie = [];
         let listaEnti = [];
+        let listaEntiFiltrata = [];
+        let currentPage = 1;
+        const itemsPerPage = 50;
+        let pendingRuntsReferente = null;
 
         document.addEventListener('DOMContentLoaded', async () => {
             await caricaTipologie();
             await caricaDati();
         });
 
+        // --- CARICAMENTO DATI ---
         async function caricaTipologie() {
             try {
                 const res = await fetch('/api/tipologie');
                 listaTipologie = await res.json();
-                const select = document.getElementById('ID_TIPOLOGIA');
-                select.innerHTML = '<option value="">-- Seleziona --</option>';
-                listaTipologie.forEach(t => select.innerHTML += `<option value="${t.ID}">${t.Tipologia}</option>`);
-            } catch (err) { console.error("Errore tipologie:", err); }
+                const filterSel = document.getElementById('filtroTipologia');
+                const newSel = document.getElementById('NEW_TIPOLOGIA');
+                let opts = '<option value="">-- Seleziona --</option>';
+                listaTipologie.forEach(t => {
+                    const opt = `<option value="${t.ID}">${t.Tipologia}</option>`;
+                    filterSel.innerHTML += `<option value="${t.ID}">${t.Tipologia}</option>`;
+                    opts += opt;
+                });
+                newSel.innerHTML = opts;
+            } catch (err) { console.error(err); }
         }
 
         async function caricaDati() {
             try {
-                const res = await fetch('/api/associazioni');
-                listaEnti = await res.json();
-                renderTabella(listaEnti);
-            } catch (err) { console.error("Errore dati:", err); }
+                const [resEnti, resRef, resAltri] = await Promise.all([
+                    fetch('/api/associazioni'),
+                    fetch('/api/all-referenti'),
+                    fetch('/api/all-altri-soggetti')
+                ]);
+                const enti = await resEnti.json();
+                const referenti = await resRef.json();
+                const altriSoggetti = await resAltri.json();
+
+                const mapRef = {};
+                referenti.forEach(r => {
+                    if(!mapRef[r.ID_Associazione]) mapRef[r.ID_Associazione] = [];
+                    mapRef[r.ID_Associazione].push(r.Nome);
+                });
+                const mapAltri = {};
+                altriSoggetti.forEach(a => {
+                    if(!mapAltri[a.ID_Associazione]) mapAltri[a.ID_Associazione] = [];
+                    mapAltri[a.ID_Associazione].push(a.Nome);
+                });
+
+                listaEnti = enti.map(e => {
+                    const refs = mapRef[e.ID] || [];
+                    const altri = mapAltri[e.ID] || [];
+                    const searchString = [...refs, ...altri].join(' ');
+                    return { ...e, RefList: refs, AltriList: altri, SearchString: searchString };
+                });
+                filtraTabella();
+            } catch (err) { console.error(err); }
         }
 
-        function renderTabella(data) {
-            const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = '';
-            if(data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center p-4">Nessun dato trovato</td></tr>'; return; }
-
-            data.forEach(row => {
-                let tipoBadge = row.Tipologia_Nome ? `<span class="badge badge-neutral badge-lg h-auto py-3 text-center w-full block shadow-sm">${row.Tipologia_Nome}</span>` : '<span class="text-gray-300">-</span>';
-                
-                let soggettiHtml = '';
-                if(row.REFERENTI_COLLEGATI?.length > 0) {
-                    soggettiHtml += `<div class="font-bold text-xs text-gray-500 mb-1 tracking-wider">REFERENTI:</div>`;
-                    soggettiHtml += row.REFERENTI_COLLEGATI.map(r => `<div class="badge badge-outline badge-sm mr-1 mb-1 border-blue-400 text-blue-800 bg-blue-50">${r.Nome}</div>`).join('');
-                }
-                if(row.ALTRI_SOGGETTI_COLLEGATI?.length > 0) {
-                    if(soggettiHtml) soggettiHtml += `<div class="divider my-1 h-0"></div>`;
-                    soggettiHtml += `<div class="font-bold text-xs text-gray-500 mb-1 tracking-wider">ALTRI SOGGETTI:</div>`;
-                    soggettiHtml += row.ALTRI_SOGGETTI_COLLEGATI.map(s => `<div class="badge badge-outline badge-sm mr-1 mb-1 border-indigo-400 text-indigo-800 bg-indigo-50">${s.Nome}</div>`).join('');
-                }
-                if(!soggettiHtml) soggettiHtml = '<span class="text-gray-300 italic text-sm">Nessun contatto</span>';
-
-                let incarichiHtml = '';
-                if (row.TAVOLO == 1 || row.TAVOLO === true) incarichiHtml += `<div class="mb-2"><span class="btn btn-xs btn-primary text-white no-animation cursor-default border-none w-full shadow-sm">Tavolo</span></div>`;
-                if (row.DIRETTIVO_DELEGAZIONE == 1 || row.DIRETTIVO_DELEGAZIONE === true) incarichiHtml += `<div><span class="btn btn-xs btn-secondary text-white no-animation cursor-default border-none w-full shadow-sm">Direttivo</span></div>`;
-
-                tbody.innerHTML += `
-                    <tr class="hover:bg-blue-50 transition-colors border-b border-gray-100">
-                        <td class="align-middle pl-6"><div class="font-bold text-lg text-blue-900">${row.SOGGETTO}</div></td>
-                        <td class="align-middle px-4">${tipoBadge}</td>
-                        <td class="align-middle px-4">${soggettiHtml}</td>
-                        <td class="align-middle px-4">${incarichiHtml}</td>
-                        <td class="text-center align-middle pr-6">
-                            <div class="join shadow-sm">
-                                <button class="btn btn-sm btn-warning join-item" onclick='modificaEnte(${JSON.stringify(row).replace(/'/g, "&#39;")})'>✏️</button>
-                                <button class="btn btn-sm btn-error text-white join-item" onclick="eliminaEnte(${row.ID})">🗑️</button>
-                            </div>
-                        </td>
-                    </tr>`;
-            });
-        }
-
+        // --- TABELLA E PAGINAZIONE ---
         function filtraTabella() {
-            const term = document.getElementById('searchInput').value.toLowerCase();
-            const filtrati = listaEnti.filter(item => {
-                const matchEnte = item.SOGGETTO && item.SOGGETTO.toLowerCase().includes(term);
-                const matchReferenti = item.REFERENTI_COLLEGATI && item.REFERENTI_COLLEGATI.some(r => r.Nome && r.Nome.toLowerCase().includes(term));
-                const matchAltri = item.ALTRI_SOGGETTI_COLLEGATI && item.ALTRI_SOGGETTI_COLLEGATI.some(a => a.Nome && a.Nome.toLowerCase().includes(term));
-                return matchEnte || matchReferenti || matchAltri;
+            const text = document.getElementById('searchInput').value.toLowerCase();
+            const tipoFilter = document.getElementById('filtroTipologia').value;
+            listaEntiFiltrata = listaEnti.filter(item => {
+                const matchText = (item.SOGGETTO && item.SOGGETTO.toLowerCase().includes(text)) ||
+                                  (item.CODICEFISCALE && item.CODICEFISCALE.toLowerCase().includes(text)) ||
+                                  (item.SearchString && item.SearchString.toLowerCase().includes(text));
+                const matchTipo = tipoFilter === "" || (item.ID_TIPOLOGIA == tipoFilter);
+                return matchText && matchTipo;
             });
-            renderTabella(filtrati);
+            currentPage = 1;
+            renderTabella();
         }
 
-        function toggleIncarichi() {
-            const tipologia = document.getElementById('ID_TIPOLOGIA').value;
-            const div = document.getElementById('divIncarichi');
-            if (tipologia == '1') div.classList.remove('hidden');
-            else { div.classList.add('hidden'); document.getElementById('TAVOLO').checked = false; document.getElementById('DIRETTIVO_DELEGAZIONE').checked = false; }
-        }
-
-        function apriModale() {
-            document.getElementById('formAnagrafica').reset();
-            document.getElementById('idEnte').value = ''; 
-            document.getElementById('modalTitle').innerText = "Nuovo Ente";
-            document.getElementById('areaSoggettiCollegati').classList.add('hidden');
-            resetInputRef();
-            resetInputAlt();
-            toggleIncarichi(); 
-            document.getElementById('modalAnagrafica').classList.remove('hidden');
-        }
-
-        function chiudiModale() { document.getElementById('modalAnagrafica').classList.add('hidden'); }
-
-        window.modificaEnte = function(row) {
-            document.getElementById('idEnte').value = row.ID;
-            document.getElementById('SOGGETTO').value = row.SOGGETTO;
-            document.getElementById('MAIL').value = row.MAIL;
-            document.getElementById('PEC').value = row.PEC;
-            document.getElementById('ID_TIPOLOGIA').value = row.ID_TIPOLOGIA;
-            document.getElementById('TAVOLO').checked = (row.TAVOLO == 1);
-            document.getElementById('DIRETTIVO_DELEGAZIONE').checked = (row.DIRETTIVO_DELEGAZIONE == 1);
+        function renderTabella() {
+            const start = (currentPage - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const data = listaEntiFiltrata.slice(start, end);
+            const tbody = document.getElementById('tableBody');
+            document.getElementById('recordCounter').innerText = `Totale record: ${listaEntiFiltrata.length}`;
+            document.getElementById('pageIndicator').innerText = `Pagina ${currentPage} di ${Math.ceil(listaEntiFiltrata.length/itemsPerPage) || 1}`;
             
-            toggleIncarichi(); 
-            document.getElementById('areaSoggettiCollegati').classList.remove('hidden');
-            document.getElementById('modalTitle').innerText = "Modifica Ente";
+            if(data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center p-4">Nessun dato trovato</td></tr>'; return; }
             
-            resetInputRef();
-            resetInputAlt();
-            renderListeCollegate(row);
-            document.getElementById('modalAnagrafica').classList.remove('hidden');
-        }
-
-        // --- GESTIONE REFERENTI E ALTRI ---
-
-        function renderListeCollegate(row) {
-            // REFERENTI
-            const ulRef = document.getElementById('listaReferenti');
-            ulRef.innerHTML = '';
-            if(row.REFERENTI_COLLEGATI) {
-                row.REFERENTI_COLLEGATI.forEach(r => {
-                    const mailText = r.MAILREFERENTE ? `<div class="text-xs text-gray-400 italic">${r.MAILREFERENTE}</div>` : '';
-                    // Escape delle stringhe per passare alla funzione
-                    const safeNome = r.Nome.replace(/'/g, "\\'");
-                    const safeMail = (r.MAILREFERENTE || "").replace(/'/g, "\\'");
-                    
-                    ulRef.innerHTML += `
-                        <li class="flex justify-between items-center bg-white p-2 rounded border shadow-sm group">
-                            <div>
-                                <span class="text-sm font-bold text-gray-700 block">${r.Nome}</span>
-                                ${mailText}
-                            </div>
-                            <div class="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                                <button type="button" onclick="preparaModificaRef(${r.ID}, '${safeNome}', '${safeMail}')" class="btn btn-xs btn-ghost text-amber-500 hover:bg-amber-50">✏️</button>
-                                <button type="button" onclick="eliminaSoggetto('referenti', ${r.ID})" class="btn btn-xs btn-ghost text-red-500 hover:bg-red-50">🗑️</button>
-                            </div>
-                        </li>`;
-                });
-            }
-
-            // ALTRI SOGGETTI
-            const ulAlt = document.getElementById('listaAltri');
-            ulAlt.innerHTML = '';
-            if(row.ALTRI_SOGGETTI_COLLEGATI) {
-                row.ALTRI_SOGGETTI_COLLEGATI.forEach(s => {
-                    const mailText = s.MAILALTRISOGGETTI ? `<div class="text-xs text-gray-400 italic">${s.MAILALTRISOGGETTI}</div>` : '';
-                    const safeNome = s.Nome.replace(/'/g, "\\'");
-                    const safeMail = (s.MAILALTRISOGGETTI || "").replace(/'/g, "\\'");
-
-                    ulAlt.innerHTML += `
-                        <li class="flex justify-between items-center bg-white p-2 rounded border shadow-sm group">
-                             <div>
-                                <span class="text-sm font-bold text-gray-700 block">${s.Nome}</span>
-                                ${mailText}
-                            </div>
-                            <div class="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                                <button type="button" onclick="preparaModificaAlt(${s.ID}, '${safeNome}', '${safeMail}')" class="btn btn-xs btn-ghost text-amber-500 hover:bg-amber-50">✏️</button>
-                                <button type="button" onclick="eliminaSoggetto('altri-soggetti', ${s.ID})" class="btn btn-xs btn-ghost text-red-500 hover:bg-red-50">🗑️</button>
-                            </div>
-                        </li>`;
-                });
-            }
-        }
-
-        // Setup Modifica REFERENTI
-        window.preparaModificaRef = function(id, nome, mail) {
-            document.getElementById('refIdEditing').value = id;
-            document.getElementById('newReferente').value = nome;
-            document.getElementById('mailReferente').value = mail;
-            document.getElementById('btnSaveRef').innerText = "💾 Salva";
-            document.getElementById('btnSaveRef').classList.replace('btn-primary', 'btn-success');
-            document.getElementById('btnCancelRef').classList.remove('hidden');
-        }
-        window.resetInputRef = function() {
-            document.getElementById('refIdEditing').value = '';
-            document.getElementById('newReferente').value = '';
-            document.getElementById('mailReferente').value = '';
-            document.getElementById('btnSaveRef').innerText = "➕ Aggiungi";
-            document.getElementById('btnSaveRef').classList.replace('btn-success', 'btn-primary');
-            document.getElementById('btnCancelRef').classList.add('hidden');
-        }
-
-        // Setup Modifica ALTRI
-        window.preparaModificaAlt = function(id, nome, mail) {
-            document.getElementById('altIdEditing').value = id;
-            document.getElementById('newAltro').value = nome;
-            document.getElementById('mailAltro').value = mail;
-            document.getElementById('btnSaveAlt').innerText = "💾 Salva";
-            document.getElementById('btnSaveAlt').classList.replace('btn-primary', 'btn-success');
-            document.getElementById('btnCancelAlt').classList.remove('hidden');
-        }
-        window.resetInputAlt = function() {
-            document.getElementById('altIdEditing').value = '';
-            document.getElementById('newAltro').value = '';
-            document.getElementById('mailAltro').value = '';
-            document.getElementById('btnSaveAlt').innerText = "➕ Aggiungi";
-            document.getElementById('btnSaveAlt').classList.replace('btn-success', 'btn-primary');
-            document.getElementById('btnCancelAlt').classList.add('hidden');
-        }
-
-        async function gestisciSoggetto(tipo) {
-            const idAssociazione = document.getElementById('idEnte').value;
-            if(!idAssociazione) return;
-
-            let endpoint, nome, mail, idEditing;
-            let payload = { ID_Associazione: parseInt(idAssociazione) };
-
-            if(tipo === 'Referenti') {
-                endpoint = '/api/referenti';
-                nome = document.getElementById('newReferente').value;
-                mail = document.getElementById('mailReferente').value;
-                idEditing = document.getElementById('refIdEditing').value;
-                payload.MAILREFERENTE = mail; 
-            } else {
-                endpoint = '/api/altri-soggetti';
-                nome = document.getElementById('newAltro').value;
-                mail = document.getElementById('mailAltro').value;
-                idEditing = document.getElementById('altIdEditing').value;
-                payload.MAILALTRISOGGETTI = mail;
-            }
-            
-            if(!nome) return alert("Inserisci un nome");
-            payload.Nome = nome.toUpperCase(); 
-
-            // Se c'è un ID, facciamo PUT (Update), altrimenti POST (Insert)
-            const method = idEditing ? 'PUT' : 'POST';
-            const url = idEditing ? `${endpoint}/${idEditing}` : endpoint;
-
-            try {
-                const res = await fetch(url, {
-                    method: method,
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload)
-                });
-                
-                if (res.ok) {
-                    if(tipo === 'Referenti') resetInputRef(); else resetInputAlt();
-                    aggiornaDatiECorrente(idAssociazione); 
-                } else {
-                    alert("Errore operazione (Verifica i dati)");
+            tbody.innerHTML = data.map(row => {
+                let incarichi = '';
+                if (row.TAVOLO == 1) incarichi += `<span class="badge badge-primary text-white text-xs mr-1">Tavolo</span>`;
+                if (row.DIRETTIVO_DELEGAZIONE == 1) incarichi += `<span class="badge badge-secondary text-white text-xs">Direttivo</span>`;
+                let personeHtml = '';
+                if (row.RefList && row.RefList.length > 0) {
+                    personeHtml += row.RefList.map(n => `<div class="text-sm font-semibold text-gray-700">👤 ${n}</div>`).join('');
                 }
-            } catch(e) { console.error(e); alert("Errore connessione"); }
+                if (row.AltriList && row.AltriList.length > 0) {
+                    if (personeHtml) personeHtml += '<div class="mt-1 border-t border-gray-100"></div>';
+                    personeHtml += row.AltriList.map(n => `<div class="text-xs text-gray-500 italic">👥 ${n}</div>`).join('');
+                }
+                return `
+                <tr class="hover:bg-blue-50 cursor-pointer border-b" onclick="apriDettaglio(${row.ID})">
+                    <td class="font-bold text-blue-900 align-top">
+                        ${row.SOGGETTO}
+                        <div class="text-xs text-gray-400 font-mono font-normal">${row.CODICEFISCALE || ''}</div>
+                    </td>
+                    <td class="align-top"><div class="badge badge-ghost">${row.Tipologia_Nome || '-'}</div></td>
+                    <td class="align-top"><div class="flex flex-col gap-1">${personeHtml}</div></td>
+                    <td class="align-top">${incarichi}</td>
+                    <td class="text-center align-top"><button class="btn btn-sm btn-ghost text-blue-600">✏️ Apri</button></td>
+                </tr>`;
+            }).join('');
         }
 
-        async function eliminaSoggetto(tipoApi, idSoggetto) {
-            if(!confirm("Eliminare definitivamente?")) return;
-            const idAssociazione = document.getElementById('idEnte').value;
-            try {
-                await fetch(`/api/${tipoApi}/${idSoggetto}`, { method: 'DELETE' });
-                aggiornaDatiECorrente(idAssociazione);
-            } catch(e) { console.error(e); }
+        function cambiaPagina(delta) {
+            const tot = Math.ceil(listaEntiFiltrata.length / itemsPerPage) || 1;
+            const next = currentPage + delta;
+            if(next >= 1 && next <= tot) { currentPage = next; renderTabella(); }
         }
 
-        async function aggiornaDatiECorrente(idAssociazione) {
-            await caricaDati(); 
-            const enteAggiornato = listaEnti.find(e => e.ID == idAssociazione);
-            if(enteAggiornato) renderListeCollegate(enteAggiornato);
+        function apriDettaglio(id) { window.location.href = `/anagrafica_singola?id=${id}`; }
+
+        // --- FUNZIONI MODALE NUOVO ---
+        function apriModaleNuovo() {
+            document.getElementById('formNuovo').reset();
+            // Reset ricerca
+            document.getElementById('searchRuntsInput').value = "";
+            document.getElementById('resultsContainer').classList.add('hidden');
+            document.getElementById('searchResults').innerHTML = "";
+            
+            document.getElementById('divIncarichiNuovo').classList.add('hidden');
+            document.getElementById('modalNuovo').classList.remove('hidden');
+            pendingRuntsReferente = null;
         }
 
-        async function salvaEnte(e) {
+        function chiudiModale() { document.getElementById('modalNuovo').classList.add('hidden'); }
+        
+        function toggleIncarichiNuovo() {
+            const val = document.getElementById('NEW_TIPOLOGIA').value;
+            const div = document.getElementById('divIncarichiNuovo');
+            if(val == '1') div.classList.remove('hidden'); else div.classList.add('hidden');
+        }
+
+        // --- NUOVA RICERCA RUNTS (Versione Unificata) ---
+        let runtsTimeout = null;
+        
+                async function handleRuntsSearch() {
+                    clearTimeout(runtsTimeout);
+                    const term = document.getElementById('searchRuntsInput').value;
+                    const resContainer = document.getElementById('searchResults');
+                    const mainContainer = document.getElementById('resultsContainer');
+                    const loader = document.getElementById('runtsLoader');
+
+                    if(term.length < 3) { 
+                        mainContainer.classList.add('hidden'); 
+                        return; 
+                    }
+
+                    loader.classList.remove('hidden');
+
+                    runtsTimeout = setTimeout(async () => {
+                        try {
+                            const res = await fetch(`/api/runts/search?q=${encodeURIComponent(term)}`);
+                            const results = await res.json();
+                    
+                            loader.classList.add('hidden');
+                            resContainer.innerHTML = '';
+                            mainContainer.classList.remove('hidden');
+
+                            if(results.length > 0) {
+                                results.forEach(item => {
+                                    const div = document.createElement('div');
+                                    div.className = "p-3 hover:bg-yellow-100 cursor-pointer flex flex-col transition-colors border-b last:border-0";
+                                    const refInfo = (item.Cognome && item.Nome) 
+                                        ? `<div class="text-xs text-blue-600 mt-1">👤 Ref: <b>${item.Cognome} ${item.Nome}</b></div>` 
+                                        : ``;
+                                    div.innerHTML = `
+                                        <div class="flex justify-between items-start">
+                                            <span class="font-bold text-gray-800 text-sm">${item.Denominazione}</span>
+                                        </div>
+                                        <div class="flex justify-between items-end mt-1">
+                                            <span class="text-xs font-mono bg-gray-100 px-1 rounded text-gray-600">${item.CodiceFiscale || 'CF MANCANTE'}</span>
+                                        </div>
+                                        ${refInfo}
+                                    `;
+                                    div.onclick = () => selectRuntsResult(item);
+                                    resContainer.appendChild(div);
+                                });
+                            } else {
+                                resContainer.innerHTML = `
+                                    <div class="p-4 text-center text-gray-400 text-sm italic">
+                                        Nessun risultato trovato per "${term}".
+                                    </div>`;
+                            }
+                        } catch(e) { 
+                            console.error(e); 
+                            loader.classList.add('hidden');
+                        }
+                    }, 400);
+                }
+        
+        function selectRuntsResult(item) {
+            // Compila campi
+            document.getElementById('NEW_SOGGETTO').value = item.Denominazione;
+            document.getElementById('NEW_CF').value = item.CodiceFiscale;
+            const sel = document.getElementById('NEW_TIPOLOGIA');
+            sel.value = "1"; // Default a 1 (presumibilmente ETS/ODV)
+            sel.dispatchEvent(new Event('change'));
+            
+            // Gestione Referente
+            if(item.Cognome && item.Nome) {
+                pendingRuntsReferente = `${item.Cognome} ${item.Nome}`.toUpperCase();
+                
+                // Feedback utente visivo
+                const input = document.getElementById('searchRuntsInput');
+                input.value = ""; // Pulisce input
+                input.placeholder = `✅ Selezionato: ${item.Denominazione}`;
+                document.getElementById('resultsContainer').classList.add('hidden');
+                
+                // Alert Toast temporaneo
+                const toast = document.createElement('div');
+                toast.className = "alert alert-success fixed top-5 left-1/2 transform -translate-x-1/2 w-auto shadow-lg z-[60] animate-bounce";
+                toast.innerHTML = `<span>Dati caricati!<br>Referente rilevato: <b>${pendingRuntsReferente}</b></span>`;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
+            } else {
+                pendingRuntsReferente = null;
+                document.getElementById('resultsContainer').classList.add('hidden');
+            }
+        }
+
+        async function creaEnte(e) {
             e.preventDefault();
-            const form = document.getElementById('formAnagrafica');
-            const formData = new FormData(form);
-            const data = Object.fromEntries(formData.entries());
-            if(data.SOGGETTO) data.SOGGETTO = data.SOGGETTO.toUpperCase();
-            data.TAVOLO = document.getElementById('TAVOLO').checked ? 1 : 0;
-            data.DIRETTIVO_DELEGAZIONE = document.getElementById('DIRETTIVO_DELEGAZIONE').checked ? 1 : 0;
-            const id = document.getElementById('idEnte').value;
-            const method = id ? 'PUT' : 'POST';
-            const url = id ? `/api/associazioni/${id}` : '/api/associazioni';
+            const data = {
+                SOGGETTO: document.getElementById('NEW_SOGGETTO').value.toUpperCase(),
+                CODICEFISCALE: document.getElementById('NEW_CF').value.toUpperCase().replace(/\s/g, ''),
+                ID_TIPOLOGIA: document.getElementById('NEW_TIPOLOGIA').value,
+                TAVOLO: document.getElementById('NEW_TAVOLO').checked,
+                DIRETTIVO_DELEGAZIONE: document.getElementById('NEW_DIRETTIVO').checked
+            };
+
             try {
-                const res = await fetch(url, {
-                    method: method,
-                    headers: { 'Content-Type': 'application/json' },
+                const res = await fetch('/api/associazioni', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(data)
                 });
-                if(res.ok) { chiudiModale(); caricaDati(); } else { alert("Errore salvataggio"); }
-            } catch(err) { console.error(err); }
-        }
-
-        async function eliminaEnte(id) {
-            if(!confirm("Eliminare questo Ente?")) return;
-            try { await fetch(`/api/associazioni/${id}`, { method: 'DELETE' }); caricaDati(); } catch(err) { console.error(err); }
+                if(res.ok) {
+                    const json = await res.json();
+                    if(pendingRuntsReferente) {
+                        await fetch('/api/referenti', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ID_Associazione: json.id, Nome: pendingRuntsReferente})
+                        });
+                    }
+                    window.location.href = `/anagrafica_singola?id=${json.id}`;
+                } else {
+                    alert("Errore: Impossibile creare l'ente. Controlla che il CF o la Denominazione non esistano già.");
+                }
+            } catch(err) { console.error(err); alert("Errore di rete"); }
         }
     </script>
-    <script src="/assets/js/auth.js"></script>
 </body>
 </html>

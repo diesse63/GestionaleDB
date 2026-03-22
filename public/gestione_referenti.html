@@ -1,23 +1,23 @@
 <!DOCTYPE html>
 <html lang="it" data-theme="emerald">
 <head>
-    <meta charset="UTF-8"><title>Referenti - Gestionale Pro</title>
+    <meta charset="UTF-8"><title>Legale Rappresentante - Gestionale Pro</title>
     <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body class="bg-base-200 min-h-screen relative">
     
-    <!-- Tasto Indietro -->
-    <a href="servizi.html" class="btn btn-sm btn-neutral absolute top-4 left-4 shadow-md z-10">
-        ⬅ Indietro
+    <!-- Torna alla Dashboard Anagrafica -->
+    <a href="dashboard_anagrafica.html" class="btn btn-sm btn-neutral absolute top-4 left-4 shadow-md z-10">
+        ⬅ Ritorna alla Dashboard Anagrafica
     </a>
 
     <!-- Container con margine superiore aumentato -->
     <div class="container mx-auto p-4 md:p-8 max-w-7xl mt-12">
         
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-            <div><h1 class="text-5xl font-black text-gray-900 tracking-tighter uppercase italic">Referenti</h1></div>
+            <div><h1 class="text-5xl font-black text-gray-900 tracking-tighter uppercase italic">Legale Rappresentante</h1></div>
             <div class="flex gap-4">
                 <input type="text" id="searchInput" placeholder="Cerca..." class="input input-bordered shadow-xl w-full md:w-80" onkeyup="filterTable()" />
                 <label for="modal-ref" onclick="preparaNuovo()" class="btn bg-amber-500 hover:bg-amber-600 border-none text-white shadow-lg rounded-xl">Nuovo</label>
@@ -34,7 +34,7 @@
     <input type="checkbox" id="modal-ref" class="modal-toggle" />
     <div class="modal">
         <div class="modal-box rounded-3xl p-8 max-w-2xl">
-            <h3 id="modal-title" class="font-black text-2xl uppercase mb-6 border-b-4 border-amber-500 pb-2">Scheda Referente</h3>
+            <h3 id="modal-title" class="font-black text-2xl uppercase mb-6 border-b-4 border-amber-500 pb-2">Scheda Legale Rappresentante</h3>
             <form id="refForm" class="space-y-4">
                 <input type="hidden" id="ref-id">
                 <div class="form-control"><label class="label text-xs font-bold text-gray-400">NOME E COGNOME</label><input type="text" id="ref-nome" required class="input input-bordered font-bold uppercase"></div>
@@ -63,18 +63,26 @@
 
         async function init() {
             try {
-                const r1 = await fetch('/api/all-referenti');
-                const referenti = await r1.json();
-                const r2 = await fetch('/api/associazioni');
-                const enti = await r2.json();
-                
-                localDataCache = referenti || [];
+                const referenti = await apiFetch('/api/all-referenti');
+                const enti = await apiFetch('/api/associazioni');
+
+                // Creiamo mappa ID -> Nome Ente
+                const entiMap = {};
+                if(enti) enti.forEach(e => entiMap[e.ID] = e.SOGGETTO);
+
+                // Assegnamo il nome ente ai referenti
+                localDataCache = (referenti || []).map(r => {
+                    r.Ente_Nome = entiMap[r.ID_Associazione] || 'N.D.';
+                    return r;
+                });
+
                 document.getElementById('ref-ente').innerHTML = '<option value="" disabled selected>SCEGLI UN ENTE...</option>' + 
                                 (enti || []).map(e => `<option value="${e.ID}">${e.SOGGETTO.toUpperCase()}</option>`).join('');
+
                 renderTable(localDataCache);
             } catch (error) { console.error("Errore init:", error); }
+            if(window.lucide) lucide.createIcons();
         }
-
         function renderTable(data) {
             document.getElementById('tableBody').innerHTML = data.map(r => `
                 <tr class="hover:bg-amber-50 cursor-pointer" onclick="openEdit(${r.ID})">
@@ -84,8 +92,8 @@
                     <td class="text-right px-8">
                         <button class="btn btn-xs btn-ghost text-amber-600 font-bold uppercase">Modifica <i data-lucide="edit-3" class="w-3 h-3 ml-1"></i></button>
                     </td>
-                </tr>`).join('');
-            if(window.lucide) lucide.createIcons();
+                </tr>
+            `).join('');
         }
 
         function preparaNuovo() { 

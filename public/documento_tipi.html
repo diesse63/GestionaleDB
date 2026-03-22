@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="emerald">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tipologia Documenti</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-base-200 min-h-screen flex flex-col">
+
+    <div class="navbar bg-white shadow-md z-10 px-4">
+        <div class="flex-1">
+            <a href="/dashboard_servizi" class="btn btn-ghost normal-case text-xl text-emerald-700">⬅ Torna ai Servizi</a>
+        </div>
+        <div class="flex-none">
+            <h1 class="text-xl font-bold uppercase text-base-content mr-4">Tipologia Documenti</h1>
+        </div>
+    </div>
+
+    <div class="container mx-auto p-6 max-w-4xl flex-grow">
+        <div class="alert alert-info shadow-lg mb-6">
+            <i class="fa-solid fa-circle-info text-2xl"></i>
+            <div>
+                <h3 class="font-bold">Gestione Tipologie Documenti</h3>
+                <div class="text-xs">Inserisci o modifica i codici tipologia presenti in tabella DocumentoTipo.</div>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="card-title text-2xl">Elenco Tipologie</h2>
+                    <button onclick="openModal()" class="btn btn-primary btn-sm">
+                        <i class="fa-solid fa-plus"></i> Nuova Tipologia
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr class="bg-base-200">
+                                <th>Tipologia</th>
+                                <th class="w-32 text-center">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+                <div id="loading" class="text-center py-4 hidden"><span class="loading loading-spinner loading-lg"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <dialog id="modalTipo" class="modal">
+        <form id="formTipo" class="modal-box">
+            <h3 class="font-bold text-lg mb-4" id="modalTitle">Nuova Tipologia</h3>

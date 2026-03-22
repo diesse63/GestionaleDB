@@ -8,9 +8,9 @@
 </head>
 <body class="bg-base-200 min-h-screen relative">
     
-    <!-- Tasto Indietro -->
-    <a href="servizi.html" class="btn btn-sm btn-neutral absolute top-4 left-4 shadow-md z-10">
-        ⬅ Indietro
+    <!-- Torna alla Dashboard Anagrafica -->
+    <a href="dashboard_anagrafica.html" class="btn btn-sm btn-neutral absolute top-4 left-4 shadow-md z-10">
+        ⬅ Ritorna alla Dashboard Anagrafica
     </a>
 
     <!-- Container con margine superiore aumentato per il tasto back -->
@@ -25,7 +25,7 @@
         </div>
         <div class="card bg-white shadow-2xl rounded-3xl overflow-hidden">
             <table class="table w-full">
-                <thead class="bg-gray-900 text-white uppercase text-xs"><tr><th class="py-6 px-8">Nome Soggetto</th><th>Email</th><th>Ente</th><th class="text-right px-8">Azione</th></tr></thead>
+                <thead class="bg-gray-900 text-white uppercase text-xs"><tr><th class="py-6 px-8">Nome Soggetto</th><th>Email</th><th>Associazione/Ente</th><th class="text-right px-8">Azione</th></tr></thead>
                 <tbody id="tableBody"></tbody>
             </table>
         </div>
@@ -40,7 +40,7 @@
                 <div class="form-control"><label class="label text-xs font-bold text-gray-400 uppercase">Nome Soggetto</label><input type="text" id="alt-nome" required class="input input-bordered font-bold uppercase"></div>
                 <div class="form-control"><label class="label text-xs font-bold text-gray-400 uppercase">Email</label><input type="email" id="alt-mail" class="input input-bordered"></div>
                 <div class="form-control">
-                    <label class="label text-xs font-bold text-gray-400 uppercase">Ente Collegato</label>
+                    <label class="label text-xs font-bold text-gray-400 uppercase">Associazione/Ente Collegato</label>
                     <select id="alt-ente" required class="select select-bordered font-bold disabled:bg-gray-100 disabled:text-gray-500">
                         <!-- Popolato da JS -->
                     </select>
@@ -63,11 +63,21 @@
 
         async function init() {
             try {
-                const [r1, r2] = await Promise.all([fetch('/api/all-altri-soggetti'), fetch('/api/associazioni')]);
-                const soggetti = await r1.json();
-                const enti = await r2.json();
+                const [soggetti, enti] = await Promise.all([
+                    apiFetch('/api/all-altri-soggetti'),
+                    apiFetch('/api/associazioni')
+                ]);
                 
-                localDataCache = soggetti || [];
+                // Creiamo mappa ID -> Nome Ente
+                const entiMap = {};
+                if(enti) enti.forEach(e => entiMap[e.ID] = e.SOGGETTO);
+
+                // Assegnamo il nome ente ai soggetti
+                localDataCache = (soggetti || []).map(s => {
+                    s.Ente_Nome = entiMap[s.ID_Associazione] || 'N.D.';
+                    return s;
+                });
+
                 document.getElementById('alt-ente').innerHTML = '<option value="" disabled selected>SCEGLI UN ENTE...</option>' + 
                                 (enti || []).map(e => `<option value="${e.ID}">${e.SOGGETTO.toUpperCase()}</option>`).join('');
                 renderTable(localDataCache);
@@ -122,7 +132,7 @@
                 MAILALTRISOGGETTI: document.getElementById('alt-mail').value, 
                 ID_Associazione: parseInt(document.getElementById('alt-ente').value) 
             };
-            if(!payload.Nome || !payload.ID_Associazione) return alert("Compilare Nome ed Ente.");
+            if(!payload.Nome || !payload.ID_Associazione) return alert("Compilare Nome e Associazione/Ente.");
             if(!validateEmail(payload.MAILALTRISOGGETTI)) return alert("Email non valida.");
             if(!confirm("Salvare i dati?")) return;
 
@@ -130,16 +140,16 @@
             const method = id ? 'PUT' : 'POST';
 
             try {
-                const res = await fetch(url, { method: method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-                if(res.ok) { document.getElementById('modal-altri').checked = false; init(); }
+                const res = await apiFetch(url, { method: method, body: JSON.stringify(payload) });
+                if(res && res.success) { document.getElementById('modal-altri').checked = false; init(); }
             } catch(e) { console.error(e); }
         }
 
         async function handleDelete() {
             if(!confirm("Eliminare?")) return;
             try {
-                const res = await fetch(`/api/altri-soggetti/${document.getElementById('alt-id').value}`, { method: 'DELETE' });
-                if(res.ok) { document.getElementById('modal-altri').checked = false; init(); }
+                const res = await apiFetch(`/api/altri-soggetti/${document.getElementById('alt-id').value}`, { method: 'DELETE' });
+                if(res && res.success) { document.getElementById('modal-altri').checked = false; init(); }
             } catch(e) { console.error(e); }
         }
 

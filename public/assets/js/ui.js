@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const isLoginPage = window.location.pathname.includes('login.html');
     
-    // MODIFICA: Uso sessionStorage invece di localStorage per coerenza con il Login
+    // Recupera l'utente dalla sessione
     const user = sessionStorage.getItem('userName');
 
     // Se non sei loggato e non sei sulla pagina di login, vai al login
@@ -19,11 +19,14 @@ async function apiFetch(endpoint, options = {}) {
     if (options.body && !options.headers) options.headers = { 'Content-Type': 'application/json' };
 
     try {
-        // Usa CONFIG.SCRIPT_URL (che è vuoto) + endpoint (che inizia con /api/...)
-        const response = await fetch(`${CONFIG.SCRIPT_URL}${endpoint}`, options);
+        // --- FIX REFRESH: AGGIUNTA TIMESTAMP PER EVITARE CACHE BROWSER ---
+        const separator = endpoint.includes('?') ? '&' : '?';
+        const urlWithCacheBuster = `${CONFIG.SCRIPT_URL}${endpoint}${separator}_t=${Date.now()}`;
+        
+        const response = await fetch(urlWithCacheBuster, options);
         
         if (response.status === 401) {
-            sessionStorage.clear(); // Pulisce la sessione corretta
+            sessionStorage.clear();
             window.location.href = 'login.html';
             return null;
         }
@@ -56,13 +59,11 @@ async function handleLogout() {
     if (!confirm("Uscire?")) return;
     
     try {
-        // Chiama il logout sul server
         await fetch('/api/logout', { method: 'POST', credentials: 'include' });
     } catch (e) {
         console.error("Errore logout server:", e);
     }
 
-    // Pulisce la sessione locale
     sessionStorage.clear();
     window.location.replace('login.html');
 }
